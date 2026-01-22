@@ -1,0 +1,27 @@
+{
+  "id": "878090e981",
+  "title": "Envio",
+  "messages": [
+    {
+      "text": "Buenas\nSu producto está reservado, pero ya estamos cerrando los pedidos de hoy.\n*Nos confirma si desea su Envió Por Favor*",
+      "files": [],
+      "delayMs": 0
+    }
+  ],
+  "misc": {
+    "funnelLevel1": false,
+    "funnelLevel2": true,
+    "funnelLevel3": false,
+    "funnelLevel4": false
+  },
+  "schedule": {
+    "preset": "morning",
+    "times": [
+      "12:22"
+    ]
+  },
+  "usageCount": 2732,
+  "lastUsedAt": "2026-01-22T23:41:00.969Z",
+  "createdAt": "2025-11-06T15:29:38.428Z",
+  "updatedAt": "2025-11-07T00:21:36.866Z"
+}

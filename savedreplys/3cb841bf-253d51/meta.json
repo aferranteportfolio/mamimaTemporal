@@ -1,0 +1,40 @@
+{
+  "id": "3cb841bf-253d51",
+  "title": "SEGUROS",
+  "createdAt": "2025-11-04T15:48:47.522Z",
+  "usageCount": 125,
+  "lastUsedAt": "2026-01-22T14:07:36.534Z",
+  "messages": [
+    {
+      "text": "Si, somos seguros.",
+      "files": [
+        {
+          "name": "seguroVideo - Copy.mp4",
+          "storedName": "1762271327512-b898a128e0f3.mp4",
+          "size": 3363557,
+          "mimeType": "video/mp4",
+          "url": "/savedreplys/3cb841bf-253d51/1762271327512-b898a128e0f3.mp4",
+          "absUrl": "http://localhost:3050/savedreplys/3cb841bf-253d51/1762271327512-b898a128e0f3.mp4"
+        }
+      ]
+    },
+    {
+      "text": "*Vea el Video*",
+      "files": []
+    },
+    {
+      "text": "*El envio es contra entrega* Por adelantado solo abona el envio\n*Si gusta puede llamarnos* Le podemos mandar video de nuestros envios",
+      "files": []
+    },
+    {
+      "text": "*Esta bien?*",
+      "files": []
+    }
+  ],
+  "keywords": [],
+  "misc": {
+    "a": false,
+    "b": false,
+    "c": false
+  }
+}

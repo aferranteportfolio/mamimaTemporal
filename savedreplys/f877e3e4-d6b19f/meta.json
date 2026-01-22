@@ -1,0 +1,25 @@
+{
+  "id": "f877e3e4-d6b19f",
+  "title": "LUMBAR",
+  "createdAt": "2025-11-04T15:41:38.142Z",
+  "usageCount": 123,
+  "lastUsedAt": "2026-01-22T13:56:54.300Z",
+  "messages": [
+    {
+      "text": "Si,Si le serviria",
+      "files": []
+    },
+    {
+      "text": "*Ofrece soporte y confort* - No raspa y no sudas\n*Comoda, discreta y alto soporte* - Tallas completas, ajustables*\n*Usable todo el dia*",
+      "files": []
+    }
+  ],
+  "keywords": [
+    "HERE GOES SOME TEXT"
+  ],
+  "misc": {
+    "a": false,
+    "b": false,
+    "c": false
+  }
+}

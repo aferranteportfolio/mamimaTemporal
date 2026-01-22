@@ -1,0 +1,426 @@
+{
+  "id": "7071df1a-f99338",
+  "title": "CATALOGO",
+  "createdAt": "2025-12-16T15:24:09.245Z",
+  "usageCount": 71,
+  "lastUsedAt": "2026-01-22T19:05:30.842Z",
+  "messages": [
+    {
+      "text": "",
+      "files": [
+        {
+          "name": "1.png",
+          "storedName": "1765898649194-0c68c653e199.png",
+          "size": 2062419,
+          "mimeType": "image/png",
+          "url": "/savedreplys/7071df1a-f99338/1765898649194-0c68c653e199.png",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649194-0c68c653e199.png"
+        },
+        {
+          "name": "2.png",
+          "storedName": "1765898649197-871924384f63.png",
+          "size": 2205716,
+          "mimeType": "image/png",
+          "url": "/savedreplys/7071df1a-f99338/1765898649197-871924384f63.png",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649197-871924384f63.png"
+        },
+        {
+          "name": "3.png",
+          "storedName": "1765898649200-5cb88e678fe5.png",
+          "size": 1306807,
+          "mimeType": "image/png",
+          "url": "/savedreplys/7071df1a-f99338/1765898649200-5cb88e678fe5.png",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649200-5cb88e678fe5.png"
+        },
+        {
+          "name": "4.png",
+          "storedName": "1765898649202-faa1bd8ac08b.png",
+          "size": 1217444,
+          "mimeType": "image/png",
+          "url": "/savedreplys/7071df1a-f99338/1765898649202-faa1bd8ac08b.png",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649202-faa1bd8ac08b.png"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649204-bf8ad1e92f08.jpg",
+          "size": 235282,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649204-bf8ad1e92f08.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649204-bf8ad1e92f08.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649206-102532b4b004.jpg",
+          "size": 116464,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649206-102532b4b004.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649206-102532b4b004.jpg"
+        },
+        {
+          "name": "3.jpg",
+          "storedName": "1765898649207-7dd61718700e.jpg",
+          "size": 115072,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649207-7dd61718700e.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649207-7dd61718700e.jpg"
+        },
+        {
+          "name": "4.jpg",
+          "storedName": "1765898649208-8f75cac4da2d.jpg",
+          "size": 98941,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649208-8f75cac4da2d.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649208-8f75cac4da2d.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649209-608e2075b128.jpg",
+          "size": 112118,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649209-608e2075b128.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649209-608e2075b128.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649211-fd9b9c96c524.jpg",
+          "size": 108093,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649211-fd9b9c96c524.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649211-fd9b9c96c524.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649213-95e64386d0cf.jpg",
+          "size": 101580,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649213-95e64386d0cf.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649213-95e64386d0cf.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649214-4b75dfdf64ca.jpg",
+          "size": 101749,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649214-4b75dfdf64ca.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649214-4b75dfdf64ca.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649216-32f586798ee6.jpg",
+          "size": 103812,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649216-32f586798ee6.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649216-32f586798ee6.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649217-5477061399d6.jpg",
+          "size": 99085,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649217-5477061399d6.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649217-5477061399d6.jpg"
+        },
+        {
+          "name": "3.jpg",
+          "storedName": "1765898649218-252a500ec8f9.jpg",
+          "size": 159015,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649218-252a500ec8f9.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649218-252a500ec8f9.jpg"
+        },
+        {
+          "name": "4.jpg",
+          "storedName": "1765898649220-676904fb4db5.jpg",
+          "size": 189427,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649220-676904fb4db5.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649220-676904fb4db5.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649221-afe846ac0aa9.jpg",
+          "size": 139290,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649221-afe846ac0aa9.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649221-afe846ac0aa9.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649222-936053c11658.jpg",
+          "size": 103705,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649222-936053c11658.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649222-936053c11658.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649223-446a09c4a7ea.jpg",
+          "size": 100589,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649223-446a09c4a7ea.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649223-446a09c4a7ea.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649224-2b6a3bcab584.jpg",
+          "size": 95713,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649224-2b6a3bcab584.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649224-2b6a3bcab584.jpg"
+        },
+        {
+          "name": "3.jpg",
+          "storedName": "1765898649225-50b0b18cbfa1.jpg",
+          "size": 108059,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649225-50b0b18cbfa1.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649225-50b0b18cbfa1.jpg"
+        },
+        {
+          "name": "3.jpg",
+          "storedName": "1765898649227-d509fe34dd1a.jpg",
+          "size": 108052,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649227-d509fe34dd1a.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649227-d509fe34dd1a.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649229-7fc5957334b5.jpg",
+          "size": 90522,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649229-7fc5957334b5.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649229-7fc5957334b5.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649230-2e3ebe6795ed.jpg",
+          "size": 105150,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649230-2e3ebe6795ed.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649230-2e3ebe6795ed.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649232-15336e28cf9b.jpg",
+          "size": 91532,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649232-15336e28cf9b.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649232-15336e28cf9b.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649233-10ec7746e586.jpg",
+          "size": 95912,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649233-10ec7746e586.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649233-10ec7746e586.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649234-63e95f595e64.jpg",
+          "size": 101528,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649234-63e95f595e64.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649234-63e95f595e64.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649235-bc9c976a0cfb.jpg",
+          "size": 106791,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649235-bc9c976a0cfb.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649235-bc9c976a0cfb.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649237-5cee67fe8800.jpg",
+          "size": 105678,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649237-5cee67fe8800.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649237-5cee67fe8800.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649238-88ad9c821d6b.jpg",
+          "size": 102517,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649238-88ad9c821d6b.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649238-88ad9c821d6b.jpg"
+        },
+        {
+          "name": "34.jpg",
+          "storedName": "1765898649239-75833fa03e0c.jpg",
+          "size": 102772,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649239-75833fa03e0c.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649239-75833fa03e0c.jpg"
+        },
+        {
+          "name": "1.jpg",
+          "storedName": "1765898649240-99895fdcc5af.jpg",
+          "size": 101377,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649240-99895fdcc5af.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649240-99895fdcc5af.jpg"
+        },
+        {
+          "name": "2.jpg",
+          "storedName": "1765898649241-df1cf83064aa.jpg",
+          "size": 101941,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649241-df1cf83064aa.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649241-df1cf83064aa.jpg"
+        },
+        {
+          "name": "tallario.jpeg",
+          "storedName": "1765898649243-5bb596a4dbc5.jpeg",
+          "size": 74534,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/7071df1a-f99338/1765898649243-5bb596a4dbc5.jpeg",
+          "absUrl": "http://localhost:3050/savedreplys/7071df1a-f99338/1765898649243-5bb596a4dbc5.jpeg"
+        }
+      ]
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "",
+      "files": []
+    },
+    {
+      "text": "*QUE TALLA DESEA?*",
+      "files": []
+    }
+  ],
+  "keywords": [
+    "HERE GOES SOME TEXT"
+  ],
+  "misc": {
+    "a": false,
+    "b": false,
+    "c": false
+  }
+}

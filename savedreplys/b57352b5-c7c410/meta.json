@@ -1,0 +1,44 @@
+{
+  "id": "b57352b5-c7c410",
+  "title": "SEGURO CONTRA-ENTREGA",
+  "createdAt": "2025-11-07T19:23:37.947Z",
+  "usageCount": 142,
+  "lastUsedAt": "2026-01-22T15:49:47.234Z",
+  "messages": [
+    {
+      "text": "Por adelantado cobramos el delivery por seguridad.",
+      "files": []
+    },
+    {
+      "text": "En la entrega paga el producto.",
+      "files": []
+    },
+    {
+      "text": "*Tenemos tienda en Miraflores.\nSomos Seguros, vea el video.*",
+      "files": [
+        {
+          "name": "ENVIO.mp4",
+          "storedName": "1762543417941-86c6eb9aebfd.mp4",
+          "size": 3748597,
+          "mimeType": "video/mp4",
+          "url": "/savedreplys/b57352b5-c7c410/1762543417941-86c6eb9aebfd.mp4",
+          "absUrl": "http://localhost:3050/savedreplys/b57352b5-c7c410/1762543417941-86c6eb9aebfd.mp4"
+        }
+      ]
+    },
+    {
+      "text": "",
+      "files": [
+        {
+          "name": "DIR.jpeg",
+          "storedName": "1762543417945-376ad697f07d.jpeg",
+          "size": 155645,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/b57352b5-c7c410/1762543417945-376ad697f07d.jpeg",
+          "absUrl": "http://localhost:3050/savedreplys/b57352b5-c7c410/1762543417945-376ad697f07d.jpeg"
+        }
+      ]
+    }
+  ],
+  "keywords": []
+}

@@ -1,0 +1,12 @@
+{
+  "serverAttempts": 98084,
+  "apiAccepted": 109625,
+  "statusSent": 117140,
+  "statusDelivered": 106305,
+  "statusRead": 103055,
+  "statusFailed": 811,
+  "sent": 117140,
+  "delivered": 106305,
+  "read": 103055,
+  "serverSent": 98084
+}

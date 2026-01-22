@@ -1,0 +1,22 @@
+{
+  "id": "e3e8cd4d-d88928",
+  "title": "provincia",
+  "createdAt": "2025-11-26T14:43:03.729Z",
+  "usageCount": 3,
+  "lastUsedAt": "2025-11-26T22:29:19.296Z",
+  "messages": [
+    {
+      "text": "a cual provincia desearia el envio?",
+      "files": []
+    }
+  ],
+  "keywords": [
+    "provincia",
+    "Provincia"
+  ],
+  "misc": {
+    "a": false,
+    "b": true,
+    "c": false
+  }
+}

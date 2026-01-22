@@ -1,0 +1,27 @@
+{
+  "id": "6dadf60850",
+  "title": "Intro Producto",
+  "messages": [
+    {
+      "text": "Buenas, le sigue interesando el producto?\n*Nos quedan pocas unidades.*",
+      "files": [],
+      "delayMs": 0
+    }
+  ],
+  "misc": {
+    "funnelLevel1": true,
+    "funnelLevel2": false,
+    "funnelLevel3": false,
+    "funnelLevel4": false
+  },
+  "schedule": {
+    "preset": "morning",
+    "times": [
+      "11:15"
+    ]
+  },
+  "usageCount": 9147,
+  "lastUsedAt": "2026-01-22T23:34:00.958Z",
+  "createdAt": "2025-11-06T15:29:22.096Z",
+  "updatedAt": "2025-11-07T00:20:19.584Z"
+}
