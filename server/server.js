@@ -370,10 +370,10 @@ function buildMessagesFromProduct(product) {
   };
 
   const buildMediaUrl = (m) => {
-    if (m?.media && m.media.url) return m.media.url;
-    if (m?.mediaId) return `/api/media/${m.mediaId}`;
-    if (m?.media?.id) return `/api/media/${m.media.id}`;      // ✅ extra safety
-    return null;
+    const id = m?.mediaId || m?.media?.id;
+  if (id) return `/api/media/${id}`;
+  if (m?.media && m.media.url) return m.media.url; // fallback only
+  return null;
   };
 
   // ---------- INBOUND ----------
@@ -384,7 +384,7 @@ function buildMessagesFromProduct(product) {
     let imageUrl = null, videoUrl = null, audioUrl = null, location = null, locationUrl = null;
 
     if (type === "audio") {
-      audioUrl = m?.media?.url || null;
+      audioUrl = buildMediaUrl(m);
     } else if (type === "location") {
       const loc = m?.location || m?.media?.location;
       if (loc) {
@@ -426,7 +426,7 @@ function buildMessagesFromProduct(product) {
     let imageUrl = null, videoUrl = null, audioUrl = null, location = null, locationUrl = null;
 
     if (type === "audio") {
-      audioUrl = m?.media?.url || null;
+      audioUrl = buildMediaUrl(m);
     } else if (type === "location") {
       const loc = m?.location || m?.media?.location;
       if (loc) {
@@ -939,28 +939,36 @@ import { storeQueuedText } from "./wa/outbox-store.js";
 
 app.post("/api/send-text", async (req, res) => {
   try {
-    const { to, text } = req.body || {};
+    const { to, text, contextMessageId } = req.body || {};
+
     if (!to || !text || !String(text).trim()) {
       return res.status(400).json({ ok: false, error: 'Missing "to" or "text"' });
     }
 
     const cleanText = String(text).trim();
 
+    // Only allow real WhatsApp ids
+    const ctx =
+      typeof contextMessageId === "string" && contextMessageId.startsWith("wamid.")
+        ? contextMessageId
+        : null;
+
     // 🔢 attempt (now means "queued")
     incServerAttempts();
 
-    // 1) enqueue
-    const doc = await enqueueText({ to, text: cleanText });
+    // 1) enqueue (store ctx in outbox)
+    const doc = await enqueueText({ to, text: cleanText, contextMessageId: ctx });
     const outboxId = String(doc._id);
 
-    // 2) store queued placeholder in DB (same pattern as /api/send-image)
-    const tempId = await storeQueuedText({ to, text: cleanText, outboxId });
+    // 2) store queued placeholder in DB (store ctx there too)
+    const tempId = await storeQueuedText({ to, text: cleanText, outboxId, contextMessageId: ctx });
 
     return res.json({
       ok: true,
       queued: true,
       outboxId,
-      id: tempId, // placeholder id your UI can show immediately
+      id: tempId,
+      contextMessageId: ctx, // useful for debugging
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -968,6 +976,7 @@ app.post("/api/send-text", async (req, res) => {
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
+
 
 
 

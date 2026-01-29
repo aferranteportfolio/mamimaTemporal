@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const OutboxSchema = new mongoose.Schema(
   {
     kind: { type: String, enum: ["text", "image", "video", "document"], default: "text" },
-
+    contextMessageId: { type: String, default: null, index: true },
     to: { type: String, required: true, index: true },
     body: { type: String, default: "" }, // text body (or caption)
     media: {

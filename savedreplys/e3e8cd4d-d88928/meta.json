@@ -17,6 +17,6 @@
   "misc": {
     "a": false,
     "b": true,
-    "c": false
+    "c": true
   }
 }

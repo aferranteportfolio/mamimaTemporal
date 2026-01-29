@@ -104,32 +104,43 @@ function normalizeOutbound(p = {}) {
 }
 
 function normalizeInbound(p = {}) {
-  // Preserve any extra fields your pipeline already uses (media, urls, captions, etc.)
   const preserved = { ...p };
 
+  const type = String(p.type ?? (p.imageUrl ? "image" : "text")).toLowerCase();
+  const mediaId = p.mediaId ?? p?.media?.id ?? null;
+  const proxyUrl = mediaId ? `/api/media/${mediaId}` : null;
+
+  // keep what you already had, but override URLs when we have a mediaId
+  const imageUrl = p.imageUrl ?? p.image_url ?? p.media?.url ?? null;
+  const videoUrl = p.videoUrl ?? p.video_url ?? null;
+  const audioUrl = p.audioUrl ?? p.audio_url ?? null;
+  const documentUrl = p.documentUrl ?? p.document_url ?? null;
+
   return {
-    ...preserved, // keep media / imageUrl / videoUrl / audio / etc
+    ...preserved,
+
     from: p.from ?? null,
     to: p.to ?? null,
     text: p.text ?? p.caption ?? null,
     caption: p.caption ?? null,
     ts: p.ts ?? iso(),
     id: p.id ?? null,
-    type: p.type ?? (p.imageUrl ? "image" : "text"),
+    type,
 
-    // Common URL fields (keep + normalize a bit)
-    imageUrl: p.imageUrl ?? p.image_url ?? p.media?.url ?? null,
-    videoUrl: p.videoUrl ?? p.video_url ?? null,
-    audioUrl: p.audioUrl ?? p.audio_url ?? null,
-    documentUrl: p.documentUrl ?? p.document_url ?? null,
+    // ✅ expose mediaId explicitly
+    mediaId,
 
-    // Preserve media object if present
+    // ✅ force proxy for media types if mediaId exists
+    imageUrl: type === "image" && proxyUrl ? proxyUrl : imageUrl,
+    videoUrl: type === "video" && proxyUrl ? proxyUrl : videoUrl,
+    audioUrl: type === "audio" && proxyUrl ? proxyUrl : audioUrl,
+    documentUrl: type === "document" && proxyUrl ? proxyUrl : documentUrl,
+
     media: p.media ?? null,
-
-    // Keep a raw copy (if you already pass raw)
     raw: p.raw ?? preserved,
   };
 }
+
 
 
 function normTs(ts) {
@@ -141,14 +152,23 @@ function normTs(ts) {
 // ===== INBOUND UI =====
 /** @param {UiMessage} p */
 export function emitInboundUi(p) {
+  const type = String(p.type || (p.imageUrl ? "image" : "text")).toLowerCase();
+  const mediaId = p.mediaId || p?.media?.id || null;
+  const proxyUrl = mediaId ? `/api/media/${mediaId}` : null;
+
   const n = {
     id: p.id,
     chatId: p.chatId,
     from: "them",
     dir: "in",
-    type: p.type || (p.imageUrl ? "image" : "text"),
+    type,
     text: p.text || "",
-    imageUrl: p.imageUrl || null,
+    mediaId,
+
+    imageUrl: type === "image" ? (proxyUrl || p.imageUrl || null) : (p.imageUrl || null),
+    videoUrl: type === "video" ? (proxyUrl || p.videoUrl || null) : (p.videoUrl || null),
+    audioUrl: type === "audio" ? (proxyUrl || p.audioUrl || null) : null,
+
     timestamp: normTs(p.timestamp),
     status: p.status || "delivered",
   };
@@ -156,6 +176,7 @@ export function emitInboundUi(p) {
   emitAsync("inbound_ui", n);
   return n;
 }
+
 
 // ===== OUTBOUND UI (kept as-is; note: this does NOT emit outbound_ui in your original code) =====
 /** @param {UiMessage} p */

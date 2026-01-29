@@ -26,7 +26,7 @@ import { useEffect, useMemo, useRef } from "react";
  *   }
  * }} props
  */
-export default function MessageBubble({ message }) {
+export default function MessageBubble({ message, onReply, quoted }) {
   // ---------- LOG (generic diff) ----------
   const prevRef = useRef(null);
   const renderCountRef = useRef(0);
@@ -46,7 +46,7 @@ export default function MessageBubble({ message }) {
   }, [message]);
 
   // ---------- VIEW ----------
-  const isMe       = message.from === "me";
+  const isMe       = (message.isMe ?? (message.from === "me"));
   const isImage    = message.type === "image";
   const isVideo    = message.type === "video";
   const isAudio    = message.type === "audio";
@@ -180,10 +180,32 @@ export default function MessageBubble({ message }) {
   return (
   <div className={`bubble-wrapper ${isMe ? "me" : "them"}`}>
     <div className={`bubble ${isMe ? "me" : "them"}`}>
-      {/* TEXT */}
-      {message.type === "text" && (
-        <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
-      )}
+
+  <button
+    type="button"
+    className="bubble-reply-btn"
+    title="Responder"
+    onClick={(e) => {
+      e.stopPropagation();
+      onReply?.(message);
+    }}
+  >
+    ↩
+  </button>
+
+  {/* ✅ QUOTED HEADER */}
+  {quoted && (
+    <div className="bubble-quote">
+      <div className="bubble-quote-title">{quoted.author}</div>
+      <div className="bubble-quote-text">{quoted.preview}</div>
+    </div>
+  )}
+
+  {/* TEXT */}
+  {message.type === "text" && (
+    <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
+  )}
+
 
       {/* IMAGE */}
       {isImage && mediaSrc && (

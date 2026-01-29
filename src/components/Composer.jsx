@@ -29,6 +29,9 @@ export default function Composer({
   onSendText,
   onSendImage,
   focusSignal,
+  replyTo,
+  onCancelReply,
+  onAfterSendOk,
   savedReplies: savedRepliesProp = [
     { id: "1", title: "POSTSHAPPER",     body: "Bríndenos su celular para enviarle más información" },
     { id: "2", title: "Sacaleche doble", body: "——————— SACALECHE INTELIGENT * Es doble, eléctrico * 4 modos, 9 velocidades * Capacidad: 300 ml * Libre de BPA * Listo para usar * Tenemos más modelos ———————" },
@@ -61,15 +64,23 @@ export default function Composer({
   }
 
   function composeTextFromSaved(item) {
-    const parts = [];
-    if (item?.title) parts.push(item.title);
-    if (item?.body) parts.push(item.body);
-    for (const m of item?.messages || []) {
-      const t = (m?.text || "").trim();
-      if (t) parts.push(t);
-    }
-    return parts.join("\n").trim();
+  const parts = [];
+
+  // legacy
+  if (typeof item?.body === "string") {
+    const b = item.body.trim();
+    if (b) parts.push(b);
   }
+
+  // new format
+  for (const m of item?.messages || []) {
+    const t = (m?.text || "").trim();
+    if (t) parts.push(t);
+  }
+
+  return parts.join("\n").trim();
+}
+
 
   async function fileFromMeta(f) {
     const url = fileUrlFromMeta(f);
@@ -337,14 +348,16 @@ export default function Composer({
     setTimeout(() => resizeTextarea(taRef.current), 0);
 
     Promise.resolve(onSendText(value))
-      .catch(err => {
-        setText(value);
-        setTimeout(() => resizeTextarea(taRef.current), 0);
-        alert("Failed to send: " + (err?.message || String(err)));
-      })
-      .finally(() => {
-        taRef.current?.focus();
-      });
+  .then(() => onAfterSendOk?.())
+  .catch(err => {
+    setText(value);
+    setTimeout(() => resizeTextarea(taRef.current), 0);
+    alert("Failed to send: " + (err?.message || String(err)));
+  })
+  .finally(() => {
+    taRef.current?.focus();
+  });
+
   }
 
   function insertSaved(it) {
@@ -403,6 +416,47 @@ export default function Composer({
       >
         📎
       </button>
+      {replyTo && (
+  <div
+    style={{
+      position: "absolute",
+      left: 44,   // leaves space for the 📎 button
+      right: 90,  // leaves space for menu + send
+      bottom: 52, // sits above textarea area
+      background: "#f3f4f6",
+      borderLeft: "4px solid #22c55e",
+      borderRadius: 10,
+      padding: "8px 10px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    }}
+  >
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 12, opacity: 0.7 }}>Responder</div>
+      <div
+        style={{
+          fontSize: 13,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {replyTo.preview}
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={onCancelReply}
+      title="Cancelar respuesta"
+      style={{ border: "none", background: "transparent", cursor: "pointer" }}
+    >
+      ✕
+    </button>
+  </div>
+)}
 
       <textarea
         ref={taRef}

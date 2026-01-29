@@ -1103,3 +1103,21 @@ body { background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-syst
   border-radius: 9999px;
   font-size: 12px;
 }
+.bubble { position: relative; }
+
+.bubble-reply-btn{
+  position:absolute;
+  top:6px;
+  right:6px;
+  opacity:0;
+  border:none;
+  background:transparent;
+  cursor:pointer;
+  font-size:14px;
+  line-height:1;
+  padding:2px 4px;
+}
+
+.bubble:hover .bubble-reply-btn{
+  opacity:1;
+}

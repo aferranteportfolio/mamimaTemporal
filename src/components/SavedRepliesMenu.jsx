@@ -122,6 +122,13 @@ export default function SavedRepliesMenu({
                   onSend?.(it, { noPreview: true });
                   setOpenItem(null);
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();   // block browser context menu
+                  e.stopPropagation();
+                  markUsed(it.id);      // count as “use”
+                  onInsert?.(it);       // 👈 insert into composer
+                  setOpenItem(null);
+                }}
               >
                 <div className="sr-item-title">
                   {it.title || "(sin título)"}

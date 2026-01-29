@@ -1,5 +1,5 @@
 // src/components/ChatWindow.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import MessageBubble from "./MessageBubble.jsx";
 import Composer from "./Composer.jsx";
 import InlineImageComposer from "./InlineImageComposer.jsx";
@@ -47,6 +47,45 @@ export default function ChatWindow({
   const listRef = useRef(null);
   const composerRef = useRef(null);
   const [composeFiles, setComposeFiles] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+
+const buildReplyTo = useCallback((m) => {
+  if (!m) return null;
+
+  const type = (m.type || "text").toLowerCase();
+  const txt = (m.text || m.caption || "").trim();
+
+  const preview =
+    type === "text" ? (txt || "(texto)") :
+    type === "image" ? (txt || "📷 Foto") :
+    type === "video" ? (txt || "🎥 Video") :
+    type === "audio" ? "🎤 Audio" :
+    type === "location" ? "📍 Ubicación" :
+    "(mensaje)";
+
+  const waId =
+    m.wamid ||
+    m.waId ||
+    m.message_id ||
+    m.messageId ||
+    (typeof m.id === "string" && m.id.startsWith("wamid.") ? m.id : null);
+
+  if (!waId) {
+    console.warn("[REPLY] No wamid on clicked message (WhatsApp quoting won't work yet).", {
+      uiId: m.id,
+      keys: Object.keys(m || {}),
+    });
+  }
+
+  return {
+    uiId: m.id,     // always available (your app id)
+    waId,           // required for real WhatsApp reply
+    preview,
+    type,
+  };
+}, []);
+
+
 
   const quickItems = [
     "Hola, ¿en qué puedo ayudarte?",
@@ -60,17 +99,54 @@ export default function ChatWindow({
   useEffect(() => {
     // mount/unmount hook (left empty intentionally)
   }, []);
+  useEffect(() => {
+  setReplyTo(null);
+}, [activeId])
 
   const normalizeForUI = (m) => {
+    const waIdCandidate =
+  m.wamid ??
+  m.waId ??
+  m.message_id ??
+  m.messageId ??
+  m.id;
+
+const waId =
+  typeof waIdCandidate === "string" && waIdCandidate.startsWith("wamid.")
+    ? waIdCandidate
+    : null;
+
+const replyCand =
+  m.replyToId ??
+  m.contextMessageId ??
+  m.context?.message_id ??
+  m.context?.id;
+
+const replyToWaId =
+  typeof replyCand === "string" && replyCand.startsWith("wamid.")
+    ? replyCand
+    : null;
+
     const ts =
       typeof m.timestamp === "number"
         ? m.timestamp
         : /^\d{10}$/.test(String(m.timestamp))
         ? Number(m.timestamp) * 1000
         : Date.parse(m.timestamp);
+      const replyToId =
+      m.replyToId ??
+      m.reply_to_id ??
+      m.contextMessageId ??
+      m.context?.id ??
+      m.context?.message_id ??
+      m.context?.messageId ??
+      (typeof m.context === "string" ? m.context : null);
 
     return {
-      ...m,
+        ...m,
+      waId,
+      replyToWaId,
+      replyToId,
       id: m.id ?? `${m.chatId}-${ts || "na"}`,
       text: m.text ?? "",
       imageUrl: m.imageUrl ?? undefined,
@@ -84,7 +160,7 @@ export default function ChatWindow({
           }),
     };
   };
-
+  
   const uiMessages = useMemo(() => {
     const base = (messages || [])
       .slice()
@@ -127,7 +203,11 @@ export default function ChatWindow({
 
     return base.map(normalizeForUI);
   }, [messages, activeId]);
-
+  const messagesById = useMemo(() => {
+  const map = new Map();
+  for (const m of uiMessages) map.set(m.id, m);
+  return map;
+}, [uiMessages]);
 
 useEffect(() => {
   const el = listRef.current;
@@ -169,30 +249,58 @@ useEffect(() => {
 
   // ---- Build items with day dividers ----
 // ---- Build items with day dividers (memoized) ----
+const customerLabel =
+  activeConversation?.displayName?.trim() ||
+  activeConversation?.customerId ||
+  "Cliente";
+
 const renderedItems = useMemo(() => {
   const out = [];
   let lastDay = null;
+
+  const quotePreview = (orig) => {
+    const type = (orig?.type || "text").toLowerCase();
+    const txt = (orig?.text || orig?.caption || "").trim();
+
+    if (type === "text") return txt || "(texto)";
+    if (type === "image") return txt || "📷 Foto";
+    if (type === "video") return txt || "🎥 Video";
+    if (type === "audio") return "🎤 Audio";
+    if (type === "location") return "📍 Ubicación";
+    return "(mensaje)";
+  };
 
   for (const m of uiMessages) {
     const ts = m.ts ?? Date.parse(m.timestamp);
     if (!isNaN(ts)) {
       const dayDate = startOfDay(ts);
       if (!lastDay || !isSameDay(dayDate, lastDay)) {
-        out.push(
-          <DayDivider
-            key={`day-${ts}`}
-            label={getDayLabel(ts)}
-          />
-        );
+        out.push(<DayDivider key={`day-${ts}`} label={getDayLabel(ts)} />);
         lastDay = dayDate;
       }
     }
 
-    out.push(<MessageBubble key={m.id} message={m} />);
+    const orig = m.replyToId ? messagesById.get(m.replyToId) : null;
+    const quoted = orig
+      ? {
+          author: orig.isMe ? "Tú" : customerLabel,
+          preview: quotePreview(orig),
+        }
+      : null;
+
+    out.push(
+      <MessageBubble
+        key={m.id}
+        message={m}
+        quoted={quoted}
+        onReply={(msg) => setReplyTo(buildReplyTo(msg))}
+      />
+    );
   }
 
   return out;
-}, [uiMessages]);
+}, [uiMessages, messagesById, customerLabel, buildReplyTo]);
+
 
 
   return (
@@ -268,9 +376,19 @@ const renderedItems = useMemo(() => {
         <Composer
           ref={composerRef}
           disabled={false}
-          onSendText={(text) =>
-            onSendText(activeConversation.id, toTarget, text)
-          }
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onAfterSendOk={() => setReplyTo(null)}
+          onSendText={async (text) => {
+          console.log("[REPLY][SEND opts]", { contextMessageId: replyTo?.messageId || null });
+          await onSendText(activeConversation.id, toTarget, text, {
+            contextMessageId: replyTo?.waId || null,  // only wamid goes to WhatsApp
+            replyToUiId: replyTo?.uiId || null        // optional: for your own UI linkage
+          });
+
+          setReplyTo(null);
+        }}
+
           onSendImage={(fileOrFiles, opts) => {
             const arr =
               fileOrFiles && typeof fileOrFiles.length === "number"
