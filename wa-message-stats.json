@@ -1,12 +1,12 @@
 {
-  "serverAttempts": 110561,
-  "apiAccepted": 131826,
-  "statusSent": 145977,
-  "statusDelivered": 128819,
-  "statusRead": 128031,
-  "statusFailed": 905,
-  "sent": 145977,
-  "delivered": 128819,
-  "read": 128031,
-  "serverSent": 110561
+  "serverAttempts": 125044,
+  "apiAccepted": 158821,
+  "statusSent": 181618,
+  "statusDelivered": 157500,
+  "statusRead": 159228,
+  "statusFailed": 1033,
+  "sent": 181618,
+  "delivered": 157500,
+  "read": 159228,
+  "serverSent": 125044
 }

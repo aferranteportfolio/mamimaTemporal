@@ -4,11 +4,16 @@
   "createdAt": "2025-10-29T22:25:43.936Z",
   "messages": [
     {
-      "text": "*RELLENA LOS DATOS*\nNombre :\nCelular :\nDireccion exacta : \nReferencia : \n-----------------\nConfirmame que producto deseas",
+      "text": "*RELLENA LOS DATOS*\nNombre :\nCelular :\nDireccion exacta : \nReferencia : \n-----------------\n*NOS ENVIA LA UBICACION DEL PUNTO📍*\n-----------------\nConfírmame que producto deseas",
       "files": []
     }
   ],
-  "usageCount": 486,
-  "lastUsedAt": "2026-01-29T01:23:53.791Z",
-  "keywords": []
+  "usageCount": 614,
+  "lastUsedAt": "2026-02-11T00:46:38.540Z",
+  "keywords": [],
+  "misc": {
+    "a": false,
+    "b": false,
+    "c": false
+  }
 }

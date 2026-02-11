@@ -369,12 +369,12 @@ function buildMessagesFromProduct(product) {
     return d.toISOString();
   };
 
-  const buildMediaUrl = (m) => {
-    const id = m?.mediaId || m?.media?.id;
-  if (id) return `/api/media/${id}`;
-  if (m?.media && m.media.url) return m.media.url; // fallback only
+const buildMediaUrl = (m) => {
+  const id = m?.mediaId || m?.media?.id;
+  if (id) return `/api/media/${id}`;  // ✅ always
   return null;
-  };
+};
+
 
   // ---------- INBOUND ----------
   const inbound = (product.customer_messages || []).map((m, i) => {

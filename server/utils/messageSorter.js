@@ -9,6 +9,9 @@ import {
 } from "../dbFunctionality/functionality.js";
 import fs from "node:fs";
 
+const SAVED_REPLY_DELAY_MS = Number(process.env.SAVED_REPLY_DELAY_MS ?? 5000);
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 
 
@@ -302,82 +305,68 @@ function nowIso() {
  * 3. Send WhatsApp messages + media
  */
 export async function actuallySendSavedReplyObject(toPhone, savedReply, folderName, miscCfg) {
-  console.log(
-    `[autoReplyEngine] 📨 REQUEST TO SEND "${savedReply.title}" ->`,
-    toPhone
-  );
+  console.log(`[autoReplyEngine] 📨 REQUEST TO SEND "${savedReply.title}" ->`, toPhone);
 
-
-  // -------------------------------------------------
-  // 1. DB logging (d / f)
-  // -------------------------------------------------
+  // 1) DB logging
   try {
-  // 1) Pre-log to DB; if any returns false → EXIT EARLY
-  if (miscCfg?.d) {
-    const okProduct = await updateProductObejctByID(
-      toPhone,               // customerIdRaw
-      savedReply.title,      // product_info_requested
-      PRODUCT_VALUE_DEFAULT, // "89"
-      SHIPPING_INFO_DEFAULT, // "1"
-      QUANTITY_DEFAULT       // 0
-    );
-
-    if (okProduct === false) {
-      console.warn("[autoReplyEngine] ❌ productObject update returned false; aborting send.", {
+    if (miscCfg?.d) {
+      const okProduct = await updateProductObejctByID(
         toPhone,
-        title: savedReply.title
-      });
-      return; // <-- STOP: do nothing else
+        savedReply.title,
+        PRODUCT_VALUE_DEFAULT,
+        SHIPPING_INFO_DEFAULT,
+        QUANTITY_DEFAULT
+      );
+      if (okProduct === false) return;
     }
 
-    console.log("[autoReplyEngine] 📝 logged productObject for", toPhone, "->", savedReply.title);
+    if (miscCfg?.f) {
+      const okShip = await updateShippingStatusByID(toPhone, SHIPPING_VALUE_DEFAULT);
+      if (okShip === false) return;
+    }
+  } catch (err) {
+    console.error("[autoReplyEngine] ⚠ DB logging failed; aborting send:", err);
+    return;
   }
 
-  if (miscCfg?.f) {
-    const okShip = await updateShippingStatusByID(
-      toPhone,               // customerIdRaw
-      SHIPPING_VALUE_DEFAULT // "14"
-    );
+  // ✅ schedule via outbox (no sleep)
+  const delayMs = Number(miscCfg?.delayMs ?? SAVED_REPLY_DELAY_MS); // 15000
+  const gapMs   = Number(miscCfg?.gapMs ?? 700);                   // spacing between bubbles
+  const baseMs  = Date.now() + Math.max(0, delayMs);
 
-    if (okShip === false) {
-      console.warn("[autoReplyEngine] ❌ shippingStatus update returned false; aborting send.", {
-        toPhone
-      });
-      return; // <-- STOP: do nothing else
+  let k = 0;
+
+  for (const part of savedReply.messages || []) {
+    // Text
+    if (part.text && part.text.trim()) {
+      const cleanText = part.text.trim();
+      const runAt = new Date(baseMs + k * gapMs);
+      console.log(`[autoReplyEngine]   text scheduled @ ${runAt.toISOString()} => ${JSON.stringify(cleanText)}`);
+
+      await sendTextMessage(toPhone, cleanText, { nextAttemptAt: runAt });
+      k++;
     }
 
-    console.log("[autoReplyEngine] 📝 logged shippingStatus for", toPhone);
-  }
-} catch (err) {
-  console.error("[autoReplyEngine] ⚠ DB logging failed (thrown error); aborting send:", err);
-  return; // <-- STOP on exceptions too
-}
+    // Media
+    if (Array.isArray(part.files)) {
+      for (const f of part.files) {
+        const absoluteFilePath = path.join(SAVED_REPLIES_ROOT, folderName, f.storedName);
+        const runAt = new Date(baseMs + k * gapMs);
 
-// -------------------------------------------------
-// 2) Send the reply content (text + media in order)
-// -------------------------------------------------
-for (const part of savedReply.messages || []) {
-  // Send text first
-  if (part.text && part.text.trim()) {
-    const cleanText = part.text.trim();
-    console.log(`[autoReplyEngine]   text => ${JSON.stringify(cleanText)}`);
-    await sendTextMessage(toPhone, cleanText);
-  }
+        console.log(`[autoReplyEngine]   media scheduled @ ${runAt.toISOString()} => ${absoluteFilePath}`);
 
-  // Then any media in this block
-  if (Array.isArray(part.files)) {
-    for (const f of part.files) {
-      const absoluteFilePath = path.join(SAVED_REPLIES_ROOT, folderName, f.storedName);
-      console.log(`[autoReplyEngine]   media => ${absoluteFilePath} (${f.mimeType})`);
-      await sendMediaMessage(toPhone, {
-        filePath: absoluteFilePath,
-        mimeType: f.mimeType || "image/jpeg",
-        originalName: f.name || f.storedName || "file"
-      });
+        // ✅ This only works if sendMediaMessage also ENQUEUES and supports nextAttemptAt.
+        await sendMediaMessage(toPhone, {
+          filePath: absoluteFilePath,
+          mimeType: f.mimeType || "image/jpeg",
+          originalName: f.name || f.storedName || "file",
+          nextAttemptAt: runAt, // 👈 you'll need to wire this inside sendMediaMessage
+        });
+
+        k++;
+      }
     }
   }
-}
-
 }
 
 

@@ -362,9 +362,10 @@ export default function MessageBubble({ message, onReply, quoted }) {
       <div className="bubble-meta">
         <span className="bubble-time">
           {new Date(message.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+})}
         </span>
       </div>
     </div>

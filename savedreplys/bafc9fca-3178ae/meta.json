@@ -2,8 +2,8 @@
   "id": "bafc9fca-3178ae",
   "title": "DIRRECION",
   "createdAt": "2025-11-04T15:41:03.707Z",
-  "usageCount": 620,
-  "lastUsedAt": "2026-01-28T22:18:51.866Z",
+  "usageCount": 892,
+  "lastUsedAt": "2026-02-11T00:47:29.473Z",
   "messages": [
     {
       "text": "*Nuestra Tienda:*",
@@ -23,7 +23,11 @@
       "files": []
     },
     {
-      "text": "👉🏻Lunes a sábado de 10 am a 8 pm",
+      "text": "👉🏻Lunes a sábado de 10 am a 6 pm",
+      "files": []
+    },
+    {
+      "text": "*Donde se Ubica?*",
       "files": []
     }
   ],

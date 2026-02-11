@@ -40,7 +40,14 @@ OutboxSchema.index({ state: 1, nextAttemptAt: 1 });
 export const OutboxMessage =
   mongoose.models.OutboxMessage || mongoose.model("OutboxMessage", OutboxSchema);
 
-export async function enqueueText({ to, text, contextMessageId = null, runId = null, seq = null }) {
+export async function enqueueText({
+  to,
+  text,
+  contextMessageId = null,
+  runId = null,
+  seq = null,
+  nextAttemptAt = null,
+}) {
   return OutboxMessage.create({
     kind: "text",
     to,
@@ -50,9 +57,10 @@ export async function enqueueText({ to, text, contextMessageId = null, runId = n
     seq,
     state: "pending",
     attempts: 0,
-    nextAttemptAt: new Date(),
+    nextAttemptAt: nextAttemptAt ?? new Date(),
   });
 }
+
 
 // ---------- helpers ----------
 function sleep(ms) {
