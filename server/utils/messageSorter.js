@@ -335,7 +335,7 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
   const baseMs  = Date.now() + Math.max(0, delayMs);
 
   let k = 0;
-
+  const messages = Array.isArray(savedReply?.messages) ? savedReply.messages : [];
   for (let i = 0; i < part.files.length; i++) {
       const f = part.files[i];
 

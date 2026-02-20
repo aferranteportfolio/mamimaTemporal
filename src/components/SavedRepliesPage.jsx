@@ -182,9 +182,9 @@ export default function SavedRepliesPage() {
   const onDelete = async (id) => {
     setMenuOpenId(null);
     try {
-      const res = await fetch(`${API_BASE}/api/saved-replies/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/saved-replies/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        credentials: "include"
+        headers: { Accept: "application/json" }
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setList(prev => prev.filter(x => x.id !== id));

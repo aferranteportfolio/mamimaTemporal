@@ -1,0 +1,48 @@
+{
+  "id": "dcb397f3-0ee7b2",
+  "title": "ASIENTO",
+  "createdAt": "2026-02-20T05:38:50.519Z",
+  "usageCount": 2,
+  "lastUsedAt": "2026-02-20T05:39:47.634Z",
+  "messages": [
+    {
+      "text": "👉 MODELO BUDDY: 170 SOLES 👈\n* De 18 meses a 8 años\n* Material: Metal\n* Soporta hasta 90 kilos",
+      "files": [
+        {
+          "name": "buddy.jpg",
+          "storedName": "1771565930516-0b016412a7d9.jpg",
+          "size": 117789,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/dcb397f3-0ee7b2/1771565930516-0b016412a7d9.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/dcb397f3-0ee7b2/1771565930516-0b016412a7d9.jpg"
+        }
+      ]
+    },
+    {
+      "text": "👉MODELO MICKEY: 150 SOLES 👈\n* De 8 meses a 7 años\n* Material: Metal\n* Soporta hasta 50 kilos\n",
+      "files": [
+        {
+          "name": "mickey.jpg",
+          "storedName": "1771565930517-006340b0b482.jpg",
+          "size": 126294,
+          "mimeType": "image/jpeg",
+          "url": "/savedreplys/dcb397f3-0ee7b2/1771565930517-006340b0b482.jpg",
+          "absUrl": "http://localhost:3050/savedreplys/dcb397f3-0ee7b2/1771565930517-006340b0b482.jpg"
+        }
+      ]
+    },
+    {
+      "text": "*Donde se ubica?*",
+      "files": []
+    }
+  ],
+  "keywords": [
+    "Quiero información y precio de los ASIENTOS DELANTEROS"
+  ],
+  "misc": {
+    "a": true,
+    "b": true,
+    "c": true,
+    "d": true
+  }
+}
