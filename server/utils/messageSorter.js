@@ -366,13 +366,15 @@ for (const part of savedReply.messages || []) {
 
   // Then any media in this block
   if (Array.isArray(part.files)) {
-    for (const f of part.files) {
+    for (let i = 0; i < part.files.length; i++) {
+      const f = part.files[i];
       const absoluteFilePath = path.join(SAVED_REPLIES_ROOT, folderName, f.storedName);
       console.log(`[autoReplyEngine]   media => ${absoluteFilePath} (${f.mimeType})`);
       await sendMediaMessage(toPhone, {
         filePath: absoluteFilePath,
         mimeType: f.mimeType || "image/jpeg",
-        originalName: f.name || f.storedName || "file"
+        originalName: f.name || f.storedName || "file",
+        caption: i === 0 ? String(part.text || "") : ""
       });
     }
   }

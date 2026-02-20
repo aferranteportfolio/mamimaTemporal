@@ -1,7 +1,7 @@
 // server/wa/outbound-wrapper.js
 
 import fs from "node:fs";
-import { sendTextBack, uploadMediaToWhatsApp, sendImageByMediaId } from "./send.js";
+import { sendTextBack, uploadMediaToWhatsApp, sendImageByMediaId, sendVideoByMediaId } from "./send.js";
 import { enqueueText } from "./outbox.js";
 
 export async function sendTextMessage(toPhone, text, { runId = null, seq = null } = {}) {
@@ -13,7 +13,7 @@ export async function sendTextMessage(toPhone, text, { runId = null, seq = null 
 }
 
 export async function sendMediaMessage(toPhone, fileInfo) {
-  const { filePath, mimeType, originalName } = fileInfo || {};
+  const { filePath, mimeType, originalName, caption } = fileInfo || {};
   if (!filePath) return null;
 
   console.log("[outbound-wrapper] DIRECT → MEDIA to", toPhone, filePath, mimeType);
@@ -26,5 +26,11 @@ export async function sendMediaMessage(toPhone, fileInfo) {
     filename: originalName
   });
 
-  await sendImageByMediaId(String(toPhone), mediaId);
+  const kind = String(mimeType || "").toLowerCase().startsWith("video/") ? "video" : "image";
+  if (kind === "video") {
+    await sendVideoByMediaId(String(toPhone), mediaId, caption || "");
+    return;
+  }
+
+  await sendImageByMediaId(String(toPhone), mediaId, caption || "");
 }

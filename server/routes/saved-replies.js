@@ -329,13 +329,34 @@ savedRepliesRouter.post("/", pickBodyParser, async (req, res) => {
     const inMessages = Array.isArray(metaIn.messages) ? metaIn.messages : [];
     const mode = descriptor ? "descriptor" : "meta";
 
-    const outMessages = await attachUploadsToMessages({
-      req, id, dir,
-      inMessages,
-      uploads: files,
-      mode,
-      descriptor
-    });
+    let outMessages;
+
+    // Flat UI create path sends files as files[i][].
+    // Preserve exact per-message mapping instead of dropping unmatched files to message[0].
+    const hasIndexedFields = files.some((f) => /^files\[(\d+)\]\[\]$/.test(f.fieldname || ""));
+    if (hasIndexedFields) {
+      outMessages = inMessages.map((m) => ({
+        text: typeof m?.text === "string" ? m.text : "",
+        files: [],
+      }));
+
+      for (const up of files) {
+        const m = String(up.fieldname || "").match(/^files\[(\d+)\]\[\]$/);
+        if (!m) continue;
+        const idx = Number(m[1] || 0);
+        const fileInfo = await persistUploadTo(dir, up, req, id);
+        if (!outMessages[idx]) outMessages[idx] = { text: "", files: [] };
+        outMessages[idx].files.push(fileInfo);
+      }
+    } else {
+      outMessages = await attachUploadsToMessages({
+        req, id, dir,
+        inMessages,
+        uploads: files,
+        mode,
+        descriptor
+      });
+    }
 
     const savedMeta = normalizeMeta({
       id,
