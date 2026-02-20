@@ -1,0 +1,30 @@
+{
+  "id": "2a23ef2e-a6b181",
+  "title": "VIDEO TOBILLERA",
+  "createdAt": "2026-02-11T15:53:37.716Z",
+  "usageCount": 9,
+  "lastUsedAt": "2026-02-18T22:31:02.765Z",
+  "messages": [
+    {
+      "text": "",
+      "files": [
+        {
+          "name": "tobillera.mp4",
+          "storedName": "1770825217709-8c31e428031d.mp4",
+          "size": 9771803,
+          "mimeType": "video/mp4",
+          "url": "/savedreplys/2a23ef2e-a6b181/1770825217709-8c31e428031d.mp4",
+          "absUrl": "http://localhost:3050/savedreplys/2a23ef2e-a6b181/1770825217709-8c31e428031d.mp4"
+        }
+      ]
+    }
+  ],
+  "keywords": [
+    "HERE GOES SOME TEXT"
+  ],
+  "misc": {
+    "a": false,
+    "b": false,
+    "c": false
+  }
+}

@@ -336,7 +336,9 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
 
   let k = 0;
 
-  for (const part of savedReply.messages || []) {
+  for (let i = 0; i < part.files.length; i++) {
+      const f = part.files[i];
+
     // Text
     if (part.text && part.text.trim()) {
       const cleanText = part.text.trim();
@@ -359,7 +361,8 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
         await sendMediaMessage(toPhone, {
           filePath: absoluteFilePath,
           mimeType: f.mimeType || "image/jpeg",
-          originalName: f.name || f.storedName || "file",
+           originalName: f.name || f.storedName || "file",
+        caption: i === 0 ? String(part.text || "") : "",
           nextAttemptAt: runAt, // 👈 you'll need to wire this inside sendMediaMessage
         });
 
