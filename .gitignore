@@ -28,7 +28,11 @@ mongo-backup/
 mongo-backup.zip
 *.bson
 *.metadata.json
+savedreplys/
 outboxlogs/
+programmedmsgs/
+wa-message-stats.json
+
 
 # --- DO NOT COMMIT BACKUPS / LOGS ---
 mongo-backup/
