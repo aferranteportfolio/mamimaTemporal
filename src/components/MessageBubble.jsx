@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * @param {{
@@ -55,6 +55,27 @@ export default function MessageBubble({ message, onReply, quoted }) {
   const isLocation = message.type === "location";
   const isDocument = message.type === "document" || message.type === "file";
   const isCtwa = message.type === "ctwa_referral" || message.referral_type === "ads";
+
+  const ctwaMediaHref =
+    message.referral_metadata?.media_url ||
+    message.imageUrl ||
+    message.videoUrl ||
+    message.referral_metadata?.source_url ||
+    null;
+
+  const ctwaMediaSrc =
+    message.referral_metadata?.image_url ||
+    message.referral_metadata?.thumbnail_url ||
+    message.imageUrl ||
+    message.referral_metadata?.media_url ||
+    null;
+
+  const hasCtwaMedia = !!(ctwaMediaHref || ctwaMediaSrc);
+  const [ctwaMediaUnavailable, setCtwaMediaUnavailable] = useState(false);
+
+  useEffect(() => {
+    setCtwaMediaUnavailable(false);
+  }, [message.id, ctwaMediaHref, ctwaMediaSrc]);
 
   // IMAGE / VIDEO SRC
   const mediaSrc = useMemo(() => {
@@ -409,19 +430,24 @@ export default function MessageBubble({ message, onReply, quoted }) {
         <div className="ctwa-card" role="note" aria-label="Mensaje de anuncio">
           <div className="ctwa-badge">Sponsored • From Ad</div>
 
-          {(message.referral_metadata?.media_url || message.imageUrl || message.videoUrl) && (
+          {hasCtwaMedia && !ctwaMediaUnavailable && ctwaMediaSrc && (
             <a
               className="ctwa-media-link"
-              href={message.referral_metadata?.media_url || message.imageUrl || message.videoUrl}
+              href={ctwaMediaHref || ctwaMediaSrc}
               target="_blank"
               rel="noreferrer"
             >
               <img
-                src={message.referral_metadata?.image_url || message.imageUrl || message.referral_metadata?.media_url}
+                src={ctwaMediaSrc}
                 alt="Ad preview"
                 className="ctwa-media"
+                onError={() => setCtwaMediaUnavailable(true)}
               />
             </a>
+          )}
+
+          {(!hasCtwaMedia || ctwaMediaUnavailable || !ctwaMediaSrc) && (
+            <div className="ctwa-media-unavailable">Media unavailable</div>
           )}
 
           <div className="ctwa-headline">

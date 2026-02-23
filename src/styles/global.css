@@ -1185,3 +1185,15 @@ body { background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-syst
 .ctwa-headline { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
 .ctwa-body { font-size: 13px; line-height: 1.35; margin-bottom: 6px; white-space: pre-wrap; }
 .ctwa-meta { font-size: 11px; color: #2f4d36; }
+
+.ctwa-media-unavailable {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #94c59a;
+  background: #eef8ec;
+  color: #2f4d36;
+  font-size: 12px;
+  font-weight: 600;
+}
