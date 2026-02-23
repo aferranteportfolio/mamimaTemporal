@@ -32,6 +32,7 @@ savedreplys/
 outboxlogs/
 programmedmsgs/
 wa-message-stats.json
+.cron-state.json
 
 
 # --- DO NOT COMMIT BACKUPS / LOGS ---
