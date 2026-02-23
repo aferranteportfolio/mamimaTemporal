@@ -81,8 +81,10 @@ const buildReplyTo = useCallback((m) => {
   return {
     uiId: m.id,     // always available (your app id)
     waId,           // required for real WhatsApp reply
+    sender: m.isMe || m.from === "me" ? "Tú" : "Cliente",
     preview,
     type,
+    thumbUrl: m.imageUrl || m.videoUrl || null,
   };
 }, []);
 
@@ -206,11 +208,30 @@ const replyToWaId =
 
     return base.map(normalizeForUI);
   }, [messages, activeId]);
-  const messagesById = useMemo(() => {
-  const map = new Map();
-  for (const m of uiMessages) map.set(m.id, m);
-  return map;
-}, [uiMessages]);
+  
+  const messageLookup = useMemo(() => {
+    const byUiId = new Map();
+    const byWaId = new Map();
+    for (const m of uiMessages) {
+      byUiId.set(m.id, m);
+      if (m.waId) byWaId.set(m.waId, m);
+    }
+    return { byUiId, byWaId };
+  }, [uiMessages]);
+
+  const jumpToMessage = useCallback((targetId) => {
+    if (!targetId) return;
+
+    const selector = `[data-message-id="${String(targetId).replace(/"/g, '\"')}"]`;
+    const node = listRef.current?.querySelector(selector);
+    if (!node) return;
+
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.classList.add("message-jump-highlight");
+    window.setTimeout(() => {
+      node.classList.remove("message-jump-highlight");
+    }, 1400);
+  }, []);
 
 useEffect(() => {
   const el = listRef.current;
@@ -284,11 +305,19 @@ const renderedItems = useMemo(() => {
       }
     }
 
-    const orig = m.replyToId ? messagesById.get(m.replyToId) : null;
-    const quoted = orig
+    const replyRef = m.replyToId || m.replyToWaId || m.contextMessageId || null;
+    const orig = replyRef
+      ? (messageLookup.byUiId.get(replyRef) || messageLookup.byWaId.get(replyRef) || null)
+      : null;
+
+    const quoted = replyRef
       ? {
-          author: orig.isMe ? "Tú" : customerLabel,
-          preview: quotePreview(orig),
+          author: orig ? (orig.isMe ? "Tú" : customerLabel) : "Mensaje original",
+          preview: orig ? quotePreview(orig) : "Original message unavailable",
+          onClick: () => {
+            if (orig?.id) jumpToMessage(orig.id);
+          },
+          canJump: !!orig?.id,
         }
       : null;
 
@@ -303,7 +332,7 @@ const renderedItems = useMemo(() => {
   }
 
   return out;
-}, [uiMessages, messagesById, customerLabel, buildReplyTo]);
+}, [uiMessages, messageLookup, customerLabel, buildReplyTo, jumpToMessage]);
 
 
 
@@ -384,7 +413,7 @@ const renderedItems = useMemo(() => {
           onCancelReply={() => setReplyTo(null)}
           onAfterSendOk={() => setReplyTo(null)}
           onSendText={async (text) => {
-          console.log("[REPLY][SEND opts]", { contextMessageId: replyTo?.messageId || null });
+          console.log("[REPLY][SEND opts]", { contextMessageId: replyTo?.waId || null });
           await onSendText(activeConversation.id, toTarget, text, {
             contextMessageId: replyTo?.waId || null,  // only wamid goes to WhatsApp
             replyToUiId: replyTo?.uiId || null        // optional: for your own UI linkage

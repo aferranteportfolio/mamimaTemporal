@@ -208,6 +208,7 @@ function extractSimpleMessages(body) {
       for (const m of v?.messages ?? []) {
         const type = m?.type || 'text';
 
+        const contextMessageId = m?.context?.id || null;
         const normalized = {
           from: safeDigits(m?.from),     // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
@@ -215,6 +216,9 @@ function extractSimpleMessages(body) {
           ts: tsToIso(m?.timestamp),     // ISO string
           type,                          // 'text' | 'image' | 'video' | ...
           text: pickText(m),             // best-effort textual content
+          contextMessageId,
+          replyToId: contextMessageId,
+          context: contextMessageId ? { id: contextMessageId } : undefined,
         };
 
         // Attach media block if applicable
@@ -381,7 +385,7 @@ const buildMediaUrl = (m) => {
     const type = (m?.type || "text").toLowerCase();
     const text = pickText(type, m);
 
-    let imageUrl = null, videoUrl = null, audioUrl = null, location = null, locationUrl = null;
+    let imageUrl = null, videoUrl = null, audioUrl = null, fileUrl = null, location = null, locationUrl = null;
 
     if (type === "audio") {
       audioUrl = buildMediaUrl(m);
@@ -397,10 +401,13 @@ const buildMediaUrl = (m) => {
       const mediaUrl = buildMediaUrl(m);
       if (type === "image") imageUrl = mediaUrl;
       if (type === "video") videoUrl = mediaUrl;
+      if (type === "document" || type === "file") fileUrl = mediaUrl;
     }
 
+    const stableId = m?.id || `${chatId}-c${i}`;
     return {
-      id: `${chatId}-c${i}`,
+      id: stableId,
+      waId: typeof m?.id === "string" && m.id.startsWith("wamid.") ? m.id : null,
       chatId,
       from: "them",
       dir: "in",
@@ -409,9 +416,13 @@ const buildMediaUrl = (m) => {
       imageUrl,
       videoUrl,
       audioUrl,
+      fileUrl,
+      fileName: m?.media?.filename || m?.fileName || undefined,
       location,
       locationUrl,
       mediaId: m?.mediaId || m?.media?.id || null,
+      contextMessageId: m?.contextMessageId || null,
+      replyToId: m?.replyToId || m?.contextMessageId || null,
       timestamp: toIsoTs(m?.timestamp),
       status: "delivered",
     };
@@ -423,7 +434,7 @@ const buildMediaUrl = (m) => {
     const type = (m?.type || "text").toLowerCase();
     const text = pickText(type, m);                           // ✅ same fix here
 
-    let imageUrl = null, videoUrl = null, audioUrl = null, location = null, locationUrl = null;
+    let imageUrl = null, videoUrl = null, audioUrl = null, fileUrl = null, location = null, locationUrl = null;
 
     if (type === "audio") {
       audioUrl = buildMediaUrl(m);
@@ -439,10 +450,13 @@ const buildMediaUrl = (m) => {
       const mediaUrl = buildMediaUrl(m);
       if (type === "image") imageUrl = mediaUrl;
       if (type === "video") videoUrl = mediaUrl;
+      if (type === "document" || type === "file") fileUrl = mediaUrl;
     }
 
+    const stableId = m?.id || `${chatId}-s${i}`;
     return {
-      id: `${chatId}-s${i}`,
+      id: stableId,
+      waId: typeof m?.id === "string" && m.id.startsWith("wamid.") ? m.id : null,
       chatId,
       from: "me",
       dir: "out",
@@ -451,11 +465,15 @@ const buildMediaUrl = (m) => {
       imageUrl,
       videoUrl,
       audioUrl,
+      fileUrl,
+      fileName: m?.media?.filename || m?.fileName || undefined,
       location,
       locationUrl,
       mediaId: m?.mediaId || m?.media?.id || null,
+      contextMessageId: m?.contextMessageId || null,
+      replyToId: m?.replyToId || m?.contextMessageId || null,
       timestamp: toIsoTs(m?.timestamp),
-      status: "sent",
+      status: m?.status || "sent",
     };
   });
 

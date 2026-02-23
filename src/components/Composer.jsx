@@ -433,17 +433,22 @@ export default function Composer({
       gap: 10,
     }}
   >
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 12, opacity: 0.7 }}>Responder</div>
-      <div
-        style={{
-          fontSize: 13,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {replyTo.preview}
+    <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+      {replyTo.thumbUrl ? (
+        <img src={replyTo.thumbUrl} alt="reply preview" style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover" }} />
+      ) : null}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: "#2563eb", fontWeight: 600 }}>{replyTo.sender || "Responder"}</div>
+        <div
+          style={{
+            fontSize: 13,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {replyTo.preview}
+        </div>
       </div>
     </div>
 

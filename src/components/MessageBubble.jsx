@@ -186,7 +186,7 @@ export default function MessageBubble({ message, onReply, quoted }) {
   ]);
 
   return (
-  <div className={`bubble-wrapper ${isMe ? "me" : "them"}`}>
+  <div className={`bubble-wrapper ${isMe ? "me" : "them"}`} data-message-id={message.id}>
     <div className={`bubble ${isMe ? "me" : "them"}`}>
 
   <button
@@ -203,10 +203,18 @@ export default function MessageBubble({ message, onReply, quoted }) {
 
   {/* ✅ QUOTED HEADER */}
   {quoted && (
-    <div className="bubble-quote">
+    <button
+      type="button"
+      className={`bubble-quote ${quoted?.canJump ? "is-clickable" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (quoted?.canJump) quoted?.onClick?.();
+      }}
+      title={quoted?.canJump ? "Ir al mensaje original" : "Mensaje original no disponible"}
+    >
       <div className="bubble-quote-title">{quoted.author}</div>
       <div className="bubble-quote-text">{quoted.preview}</div>
-    </div>
+    </button>
   )}
 
   {/* TEXT */}

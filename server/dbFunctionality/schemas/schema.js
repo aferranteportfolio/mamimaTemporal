@@ -15,9 +15,12 @@ const ChatMessageSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["text", "image", "video", "audio", "location", "button_reply"],
+      enum: ["text", "image", "video", "audio", "location", "button_reply", "document", "file"],
       default: "text",
     },
+
+    contextMessageId: { type: String, default: null },
+    replyToId: { type: String, default: null },
 
     message: { type: String },
 

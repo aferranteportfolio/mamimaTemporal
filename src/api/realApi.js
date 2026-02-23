@@ -387,11 +387,11 @@ export async function fetchMessages(chatId) {
 
 
 
-export async function sendText({ to, text }) {
+export async function sendText({ to, text, contextMessageId = null }) {
   const r = await apiFetch("/api/send-text", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({ to, text }),
+    body: JSON.stringify({ to, text, contextMessageId }),
   });
   return okJsonOrThrow(r, "sendText");
 }

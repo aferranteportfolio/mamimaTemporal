@@ -13,6 +13,7 @@ const OutboxSchema = new mongoose.Schema(
 
     to: { type: String, required: true, index: true },
     text: { type: String, required: true },
+    contextMessageId: { type: String, default: null, index: true },
 
     state: {
       type: String,
@@ -111,13 +112,14 @@ function createPairLimiter({ minGapMs = 6000 }) {
 }
 
 // ---------- Meta call ----------
-async function metaSendText({ token, phoneId, to, text }) {
+async function metaSendText({ token, phoneId, to, text, contextMessageId = null }) {
   const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
     type: "text",
     text: { body: text },
+    ...(contextMessageId ? { context: { message_id: contextMessageId } } : {}),
   };
 
   const res = await fetch(url, {
@@ -231,6 +233,7 @@ export function startOutboxWorker({
           phoneId,
           to: locked.to,
           text: locked.text,
+          contextMessageId: locked.contextMessageId || null,
         });
 
         // log attempt (stress-test style)
@@ -270,6 +273,8 @@ export function startOutboxWorker({
     // extra fields for your UI / dedupe
     status: "sent",
     outboxId: String(locked._id),
+    contextMessageId: locked.contextMessageId || null,
+    replyToId: locked.contextMessageId || null,
   };
 
   try {

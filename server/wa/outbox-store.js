@@ -7,7 +7,7 @@ function iso() {
   return new Date().toISOString();
 }
 
-export async function storeQueuedText({ to, text, outboxId }) {
+export async function storeQueuedText({ to, text, outboxId, contextMessageId = null }) {
   const dbPayload = {
     id: `outbox:${outboxId}`,
     outboxId,
@@ -18,13 +18,15 @@ export async function storeQueuedText({ to, text, outboxId }) {
     message: text,
     timestamp: iso(),
     dir: "out",
+    contextMessageId,
+    replyToId: contextMessageId,
   };
 
   await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
   return dbPayload.id;
 }
 
-export async function storeAcceptedText({ to, text, outboxId, wamid }) {
+export async function storeAcceptedText({ to, text, outboxId, wamid, contextMessageId = null }) {
   const dbPayload = {
     id: wamid,
     outboxId,
@@ -35,6 +37,8 @@ export async function storeAcceptedText({ to, text, outboxId, wamid }) {
     message: text,
     timestamp: iso(),
     dir: "out",
+    contextMessageId,
+    replyToId: contextMessageId,
   };
 
   await initializeCostumerAndStoreMessageHistory(dbPayload, 0);

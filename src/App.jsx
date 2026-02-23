@@ -607,15 +607,15 @@ if (fromSearch) {
     });
   }
 
-  async function onSendText(chatId, to, text) {
+  async function onSendText(chatId, to, text, opts = {}) {
     const tempId = newid();
     const nowIso = new Date().toISOString();
 
-    const localMsg = { id: tempId, chatId, from: "me", dir: "out", type: "text", text, timestamp: nowIso, status: "sent" };
+    const localMsg = { id: tempId, chatId, from: "me", dir: "out", type: "text", text, timestamp: nowIso, status: "sent", contextMessageId: opts?.contextMessageId || null, replyToId: opts?.contextMessageId || opts?.replyToUiId || null };
     appendMessage(chatId, localMsg);
 
     try {
-      const res = await apiSendText({ to, text });
+      const res = await apiSendText({ to, text, contextMessageId: opts?.contextMessageId || null });
       const wamid = res?.id;
 
       if (wamid) {
@@ -629,7 +629,7 @@ if (fromSearch) {
           let next = [...arr];
 
           if (i >= 0) {
-            next[i] = { ...next[i], id: wamid };
+            next[i] = { ...next[i], id: wamid, waId: wamid };
           }
 
           next = next.filter((m, idx) => !(idx !== i && m.id === wamid));

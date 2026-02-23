@@ -155,6 +155,8 @@ function buildInboundMsg(src) {
     type = "video";
   } else if (hintedType === "audio" || src?.media?.mimeType?.startsWith?.("audio")) {
     type = "audio";
+  } else if (hintedType === "document" || hintedType === "file" || src?.media?.mimeType?.startsWith?.("application/") || src?.media?.mimeType?.includes?.("pdf")) {
+    type = "document";
   } else if (hintedType === "location" || hasLocation) {
     type = "location";
   }
@@ -212,7 +214,12 @@ function buildInboundMsg(src) {
   }
 
   const payload = {
-    type, // 'text' | 'image' | 'video' | 'audio' | 'location' | 'button_reply'
+    id: isObj ? (src.id ?? undefined) : undefined,
+    contextMessageId: isObj ? (src.contextMessageId ?? src.context?.message_id ?? src.context?.id ?? null) : null,
+    replyToId: isObj
+      ? (src.replyToId ?? src.reply_to_id ?? src.contextMessageId ?? src.context?.message_id ?? src.context?.id ?? null)
+      : null,
+    type, // 'text' | 'image' | 'video' | 'audio' | 'location' | 'button_reply' | 'document'
     message,
     mediaId: mediaId || undefined,
     caption: caption ?? undefined,
@@ -260,6 +267,10 @@ function buildOutboundMsg(src, ourNumber) {
     (isObj && src.videoUrl && "video") ||
     (isObj && src.media?.mimeType?.startsWith("image") && "image") ||
     (isObj && src.media?.mimeType?.startsWith("video") && "video") ||
+    (isObj && (src.fileUrl || src.documentUrl) && "document") ||
+    (isObj && (src.media?.kind === "document" || src.media?.kind === "file") && "document") ||
+    (isObj && src.media?.mimeType?.startsWith("application/") && "document") ||
+    (isObj && src.mediaId && (src.type === "document" || src.type === "file") && "document") ||
     (isObj && src.mediaId && "image") ||
     "text";
 
@@ -268,6 +279,10 @@ function buildOutboundMsg(src, ourNumber) {
     id: isObj ? (src.id ?? undefined) : undefined,
     outboxId: isObj ? (src.outboxId ?? undefined) : undefined,
     status: isObj ? (src.status ?? undefined) : undefined,
+    contextMessageId: isObj ? (src.contextMessageId ?? src.context?.message_id ?? src.context?.id ?? null) : null,
+    replyToId: isObj
+      ? (src.replyToId ?? src.reply_to_id ?? src.contextMessageId ?? src.context?.message_id ?? src.context?.id ?? null)
+      : null,
 
     type,
     message: isObj ? (src.text ?? src.message ?? src.caption ?? "") : String(src ?? ""),
