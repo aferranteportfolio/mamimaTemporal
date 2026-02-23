@@ -190,7 +190,8 @@ const replyToWaId =
           x.type === "audio" || // ✅ audio kept
           x.type === "location" || // ✅ location kept
           x.type === "document" ||
-          x.type === "file"
+          x.type === "file" ||
+          x.type === "ctwa_referral"
       );
 
     try {
@@ -292,6 +293,7 @@ const renderedItems = useMemo(() => {
     if (type === "audio") return "🎤 Audio";
     if (type === "location") return "📍 Ubicación";
     if (type === "document" || type === "file") return txt || "📄 Documento";
+    if (type === "ctwa_referral") return "📣 Anuncio";
     return "(mensaje)";
   };
 

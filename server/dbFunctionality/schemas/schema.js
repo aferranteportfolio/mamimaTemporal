@@ -15,9 +15,12 @@ const ChatMessageSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["text", "image", "video", "audio", "location", "button_reply", "document", "file"],
+      enum: ["text", "image", "video", "audio", "location", "button_reply", "document", "file", "ctwa_referral"],
       default: "text",
     },
+
+    referral_type: { type: String, default: null },
+    referral_metadata: { type: mongoose.Schema.Types.Mixed, default: null },
 
     contextMessageId: { type: String, default: null },
     replyToId: { type: String, default: null },

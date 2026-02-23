@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef } from "react";
  *     chatId: string,
  *     from: "me" | "them",
  *     dir?: "in" | "out",
- *     type: "text" | "image" | "video" | "audio" | "location" | "document" | "file",
+ *     type: "text" | "image" | "video" | "audio" | "location" | "document" | "file" | "ctwa_referral",
  *     text?: string,
  *     imageUrl?: string,
  *     videoUrl?: string,
@@ -54,6 +54,7 @@ export default function MessageBubble({ message, onReply, quoted }) {
   const isAudio    = message.type === "audio";
   const isLocation = message.type === "location";
   const isDocument = message.type === "document" || message.type === "file";
+  const isCtwa = message.type === "ctwa_referral" || message.referral_type === "ads";
 
   // IMAGE / VIDEO SRC
   const mediaSrc = useMemo(() => {
@@ -218,7 +219,7 @@ export default function MessageBubble({ message, onReply, quoted }) {
   )}
 
   {/* TEXT */}
-  {message.type === "text" && (
+  {message.type === "text" && !isCtwa && (
     <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
   )}
 
@@ -400,6 +401,41 @@ export default function MessageBubble({ message, onReply, quoted }) {
               {location.address}
             </div>
           )}
+        </div>
+      )}
+
+      {/* CTWA REFERRAL CARD */}
+      {isCtwa && (
+        <div className="ctwa-card" role="note" aria-label="Mensaje de anuncio">
+          <div className="ctwa-badge">Sponsored • From Ad</div>
+
+          {(message.referral_metadata?.media_url || message.imageUrl || message.videoUrl) && (
+            <a
+              className="ctwa-media-link"
+              href={message.referral_metadata?.media_url || message.imageUrl || message.videoUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img
+                src={message.referral_metadata?.image_url || message.imageUrl || message.referral_metadata?.media_url}
+                alt="Ad preview"
+                className="ctwa-media"
+              />
+            </a>
+          )}
+
+          <div className="ctwa-headline">
+            {message.referral_metadata?.headline || message.text || "Ad referral"}
+          </div>
+
+          {message.referral_metadata?.body && (
+            <div className="ctwa-body">{message.referral_metadata.body}</div>
+          )}
+
+          <div className="ctwa-meta">
+            {message.referral_metadata?.ad_name || "Meta Ad"}
+            {message.referral_metadata?.campaign_id ? ` • Campaign ${message.referral_metadata.campaign_id}` : ""}
+          </div>
         </div>
       )}
 

@@ -140,9 +140,16 @@ function buildInboundMsg(src) {
 
   // Determine type using multiple hints
   const hintedType = isObj ? (src.type || src.media?.kind) : null;
+  const referral = isObj ? (src.referral_metadata || src.referral || null) : null;
+  const isCtwaReferral =
+    hintedType === "ctwa_referral" ||
+    src?.referral_type === "ads" ||
+    referral?.source === "ads";
   let type = "text";
 
-  if (isButtonReply) {
+  if (isCtwaReferral) {
+    type = "ctwa_referral";
+  } else if (isButtonReply) {
     // Treat the UBICACION button as a location-type message
     if (buttonReply?.id === "UBICACION") {
       type = "location";
@@ -231,6 +238,22 @@ function buildInboundMsg(src) {
     interactive: isButtonReply
       ? { id: buttonReply.id, title: buttonReply.title }
       : undefined,
+    referral_type: isCtwaReferral ? "ads" : (src?.referral_type ?? null),
+    referral_metadata: isCtwaReferral
+      ? {
+          ad_id: referral?.ad_id ?? null,
+          ad_name: referral?.ad_name ?? null,
+          adset_id: referral?.adset_id ?? null,
+          campaign_id: referral?.campaign_id ?? null,
+          headline: referral?.headline ?? null,
+          body: referral?.body ?? null,
+          source: referral?.source ?? "ads",
+          media_url: referral?.media_url ?? referral?.image_url ?? referral?.video_url ?? null,
+          image_url: referral?.image_url ?? null,
+          video_url: referral?.video_url ?? null,
+          type: referral?.type ?? null,
+        }
+      : (src?.referral_metadata ?? null),
     timestamp: new Date(ts),
     sentBy: undefined,
   };

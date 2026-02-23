@@ -93,7 +93,18 @@ function sortConversations(convs) {
 
 // Map the raw inbound WA event to your UI message shape
 function mapInboundToUi(raw) {
-  const { from, to, id, ts, type: rawType, text, media, location: rawLoc } = raw || {};
+  const {
+    from,
+    to,
+    id,
+    ts,
+    type: rawType,
+    text,
+    media,
+    location: rawLoc,
+    referral_type,
+    referral_metadata,
+  } = raw || {};
   const whenMs  = Number.isFinite(ts) ? ts : toMs(ts);
   const whenIso = new Date(whenMs).toISOString();
 
@@ -101,6 +112,7 @@ function mapInboundToUi(raw) {
   const loc = rawLoc || media?.location || null;
   let type = rawType || 'text';
 
+  if (referral_type === 'ads') type = 'ctwa_referral';
   if (!type && loc) type = 'location';
 
   const mediaObj = media
@@ -167,6 +179,8 @@ function mapInboundToUi(raw) {
     location,
     locationUrl,
     mediaId: media?.id ?? raw.mediaId ?? null,
+    referral_type: referral_type ?? null,
+    referral_metadata: referral_metadata ?? null,
   };
 
   if (msg.type === 'audio') {
@@ -333,7 +347,9 @@ useEffect(() => {
               ? "[Audio]"
               : msg.type === "document" || msg.type === "file"
                 ? "[Document]"
-                : "");
+                : msg.type === "ctwa_referral"
+                  ? "[Ad Referral]"
+                  : "");
 
       const next = found
         ? prev.map(c => {

@@ -265,7 +265,8 @@ function normalizeHistoryMessage(raw) {
   if (!raw || typeof raw !== "object") return raw;
 
   const m = raw;
-  const type = (m.type || m.media?.kind || (m.imageUrl ? "image" : "text")).toLowerCase();
+  const inferredType = (m.type || m.media?.kind || (m.imageUrl ? "image" : "text")).toLowerCase();
+  const type = m?.referral_type === "ads" ? "ctwa_referral" : inferredType;
 
   const mediaId = m.mediaId || m.media?.id || null;
 
@@ -337,6 +338,8 @@ function normalizeHistoryMessage(raw) {
     fileName: (type === "document" || type === "file") ? (m.fileName || m.media?.filename || m.media?.name || undefined) : undefined,
     location: location || undefined,
     locationUrl: locationUrl || undefined,
+    referral_type: m.referral_type || undefined,
+    referral_metadata: m.referral_metadata || undefined,
   };
 
   // Small debug logs so we see what the history returns

@@ -40,7 +40,7 @@ function toInboundUI(raw) {
 
   // Normalize type
   const hintedType = (raw.type || raw.media?.kind || "").toLowerCase();
-  const type = ["text", "image", "video", "audio"].includes(hintedType)
+  const type = ["text", "image", "video", "audio", "ctwa_referral"].includes(hintedType)
     ? hintedType
     : "text";
 
@@ -75,6 +75,8 @@ function toInboundUI(raw) {
     videoUrl,
     audioUrl,                                   // 👈 important
     mediaId: raw.mediaId || media.id || undefined,
+    referral_type: raw.referral_type || null,
+    referral_metadata: raw.referral_metadata || null,
     timestamp: raw.ts || new Date().toISOString(),
     status: "received",
     fromPhone: raw.from,

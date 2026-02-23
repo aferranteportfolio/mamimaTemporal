@@ -209,16 +209,36 @@ function extractSimpleMessages(body) {
         const type = m?.type || 'text';
 
         const contextMessageId = m?.context?.id || null;
+        const referral = m?.referral || null;
+        const isCtwa = referral?.source === "ads";
+        const mediaUrl = referral?.image_url || referral?.video_url || null;
+
         const normalized = {
           from: safeDigits(m?.from),     // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
           id: m?.id ?? null,             // wamid
           ts: tsToIso(m?.timestamp),     // ISO string
-          type,                          // 'text' | 'image' | 'video' | ...
+          type: isCtwa ? "ctwa_referral" : type, // preserve CTWA as structured message
           text: pickText(m),             // best-effort textual content
           contextMessageId,
           replyToId: contextMessageId,
           context: contextMessageId ? { id: contextMessageId } : undefined,
+          referral_type: isCtwa ? "ads" : null,
+          referral_metadata: isCtwa
+            ? {
+                ad_id: referral?.ad_id ?? null,
+                ad_name: referral?.ad_name ?? null,
+                adset_id: referral?.adset_id ?? null,
+                campaign_id: referral?.campaign_id ?? null,
+                headline: referral?.headline ?? null,
+                body: referral?.body ?? null,
+                source: referral?.source ?? null,
+                media_url: mediaUrl,
+                image_url: referral?.image_url ?? null,
+                video_url: referral?.video_url ?? null,
+                type: referral?.type ?? null,
+              }
+            : null,
         };
 
         // Attach media block if applicable
@@ -421,6 +441,8 @@ const buildMediaUrl = (m) => {
       location,
       locationUrl,
       mediaId: m?.mediaId || m?.media?.id || null,
+      referral_type: m?.referral_type || null,
+      referral_metadata: m?.referral_metadata || null,
       contextMessageId: m?.contextMessageId || null,
       replyToId: m?.replyToId || m?.contextMessageId || null,
       timestamp: toIsoTs(m?.timestamp),
@@ -470,6 +492,8 @@ const buildMediaUrl = (m) => {
       location,
       locationUrl,
       mediaId: m?.mediaId || m?.media?.id || null,
+      referral_type: m?.referral_type || null,
+      referral_metadata: m?.referral_metadata || null,
       contextMessageId: m?.contextMessageId || null,
       replyToId: m?.replyToId || m?.contextMessageId || null,
       timestamp: toIsoTs(m?.timestamp),
