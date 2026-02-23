@@ -337,21 +337,24 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
   let k = 0;
   const messages = Array.isArray(savedReply?.messages) ? savedReply.messages : [];
   for (const part of messages) {
+    const text = String(part?.text || "").trim();
+    const files = Array.isArray(part?.files) ? part.files : [];
 
-    // Text
-    if (part.text && part.text.trim()) {
-      const cleanText = part.text.trim();
+    // Keep same semantics as manual send flow:
+    // - If the part has files, send caption only on first file (no standalone text bubble).
+    // - If the part has no files, send text bubble.
+    if (files.length === 0 && text) {
       const runAt = new Date(baseMs + k * gapMs);
-      console.log(`[autoReplyEngine]   text scheduled @ ${runAt.toISOString()} => ${JSON.stringify(cleanText)}`);
+      console.log(`[autoReplyEngine]   text scheduled @ ${runAt.toISOString()} => ${JSON.stringify(text)}`);
 
-      await sendTextMessage(toPhone, cleanText, { nextAttemptAt: runAt });
+      await sendTextMessage(toPhone, text, { nextAttemptAt: runAt });
       k++;
     }
 
     // Media
-    if (Array.isArray(part.files)) {
-      for (let i = 0; i < part.files.length; i++) {
-        const f = part.files[i];
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
 
         const absoluteFilePath = path.join(SAVED_REPLIES_ROOT, folderName, f.storedName);
         const runAt = new Date(baseMs + k * gapMs);
@@ -363,7 +366,7 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
           filePath: absoluteFilePath,
           mimeType: f.mimeType || "image/jpeg",
            originalName: f.name || f.storedName || "file",
-          caption: i === 0 ? String(part.text || "") : "",
+          caption: i === 0 ? text : "",
 
           nextAttemptAt: runAt, // 👈 you'll need to wire this inside sendMediaMessage
         });
