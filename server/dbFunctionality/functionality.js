@@ -140,12 +140,28 @@ function buildInboundMsg(src) {
 
   // Determine type using multiple hints
   const hintedType = isObj ? (src.type || src.media?.kind) : null;
-  const referral = isObj ? (src.referral_metadata || src.referral || null) : null;
+  const referral = isObj ? (src.referral_metadata || src.referral || src.context?.referral || null) : null;
   const referralSource = String(referral?.source ?? referral?.source_type ?? src?.referral_type ?? "").toLowerCase();
+  const hasAdReferralHints = !!(
+    referral && (
+      referral?.ad_id ||
+      referral?.source_id ||
+      referral?.source_url ||
+      referral?.ctwa_clid ||
+      referral?.headline ||
+      referral?.body ||
+      referral?.title ||
+      referral?.description ||
+      referral?.image_url ||
+      referral?.video_url ||
+      referral?.thumbnail_url
+    )
+  );
   const isCtwaReferral =
     hintedType === "ctwa_referral" ||
     referralSource === "ads" ||
-    referralSource === "ad";
+    referralSource === "ad" ||
+    hasAdReferralHints;
   let type = "text";
 
   if (isCtwaReferral) {
@@ -254,6 +270,7 @@ function buildInboundMsg(src) {
           video_url: referral?.video_url ?? null,
           source_url: referral?.source_url ?? null,
           source_id: referral?.source_id ?? null,
+          ctwa_clid: referral?.ctwa_clid ?? null,
           type: referral?.type ?? null,
         }
       : (src?.referral_metadata ?? null),

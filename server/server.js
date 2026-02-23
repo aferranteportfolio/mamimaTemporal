@@ -209,9 +209,24 @@ function extractSimpleMessages(body) {
         const type = m?.type || 'text';
 
         const contextMessageId = m?.context?.id || null;
-        const referral = m?.referral || null;
+        const referral = m?.referral || m?.context?.referral || null;
         const referralSource = String(referral?.source ?? referral?.source_type ?? "").toLowerCase();
-        const isCtwa = referralSource === "ads" || referralSource === "ad";
+        const hasAdReferralHints = !!(
+          referral && (
+            referral?.ad_id ||
+            referral?.source_id ||
+            referral?.source_url ||
+            referral?.ctwa_clid ||
+            referral?.headline ||
+            referral?.body ||
+            referral?.title ||
+            referral?.description ||
+            referral?.image_url ||
+            referral?.video_url ||
+            referral?.thumbnail_url
+          )
+        );
+        const isCtwa = referralSource === "ads" || referralSource === "ad" || hasAdReferralHints;
         const mediaUrl =
           referral?.image_url ||
           referral?.video_url ||
@@ -245,6 +260,7 @@ function extractSimpleMessages(body) {
                 video_url: referral?.video_url ?? null,
                 source_url: referral?.source_url ?? null,
                 source_id: referral?.source_id ?? null,
+                ctwa_clid: referral?.ctwa_clid ?? null,
                 type: referral?.type ?? null,
               }
             : null,
