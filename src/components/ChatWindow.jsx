@@ -61,6 +61,7 @@ const buildReplyTo = useCallback((m) => {
     type === "video" ? (txt || "🎥 Video") :
     type === "audio" ? "🎤 Audio" :
     type === "location" ? "📍 Ubicación" :
+    type === "document" || type === "file" ? (txt || "📄 Documento") :
     "(mensaje)";
 
   const waId =
@@ -185,7 +186,9 @@ const replyToWaId =
           x.type === "image" ||
           x.type === "video" ||
           x.type === "audio" || // ✅ audio kept
-          x.type === "location" // ✅ location kept
+          x.type === "location" || // ✅ location kept
+          x.type === "document" ||
+          x.type === "file"
       );
 
     try {
@@ -267,6 +270,7 @@ const renderedItems = useMemo(() => {
     if (type === "video") return txt || "🎥 Video";
     if (type === "audio") return "🎤 Audio";
     if (type === "location") return "📍 Ubicación";
+    if (type === "document" || type === "file") return txt || "📄 Documento";
     return "(mensaje)";
   };
 

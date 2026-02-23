@@ -126,6 +126,11 @@ function mapInboundToUi(raw) {
       ? media.url
       : undefined;
 
+  const fileUrl =
+    (type === 'document' && media?.url)
+      ? media.url
+      : undefined;
+
   // LOCATION
   let location = null;
   let locationUrl = null;
@@ -157,6 +162,8 @@ function mapInboundToUi(raw) {
     whenMs,
     imageUrl,
     audioUrl,
+    fileUrl,
+    fileName: type === 'document' ? (media?.filename || media?.name || null) : null,
     location,
     locationUrl,
     mediaId: media?.id ?? raw.mediaId ?? null,
@@ -320,9 +327,13 @@ useEffect(() => {
         (msg.text && msg.text.trim()) ||
         (msg.type === "image"
           ? "[Image]"
-          : msg.type === "audio"
-            ? "[Audio]"
-            : "");
+          : msg.type === "video"
+            ? "[Video]"
+            : msg.type === "audio"
+              ? "[Audio]"
+              : msg.type === "document" || msg.type === "file"
+                ? "[Document]"
+                : "");
 
       const next = found
         ? prev.map(c => {
@@ -643,6 +654,7 @@ if (fromSearch) {
 
   async function onSendMedia(chatId, to, file, caption = '') {
     const isVideo = file?.type?.startsWith('video');
+    const isPdf = file?.type === 'application/pdf';
     const localUrl = URL.createObjectURL(file);
     const tempId = newid();
     const nowIso = new Date().toISOString();
@@ -652,8 +664,12 @@ if (fromSearch) {
       chatId,
       from: "me",
       dir: "out",
-      type: isVideo ? "video" : "image",
-      ...(isVideo ? { videoUrl: localUrl } : { imageUrl: localUrl }),
+      type: isVideo ? "video" : isPdf ? "document" : "image",
+      ...(isVideo
+        ? { videoUrl: localUrl }
+        : isPdf
+        ? { fileUrl: localUrl, fileName: file?.name }
+        : { imageUrl: localUrl }),
       text: caption,
       timestamp: nowIso,
       status: "sending",
@@ -677,14 +693,22 @@ if (fromSearch) {
         const finalUrl =
           res?.url ||
           (res?.mediaId ? `/api/media/${res.mediaId}` :
-          (isVideo ? next[i]?.videoUrl : next[i]?.imageUrl));
+          (isVideo
+            ? next[i]?.videoUrl
+            : isPdf
+            ? next[i]?.fileUrl
+            : next[i]?.imageUrl));
 
         if (i >= 0) {
           next[i] = {
             ...next[i],
             id: realId || next[i].id,
             status: "sent",
-            ...(isVideo ? { videoUrl: finalUrl } : { imageUrl: finalUrl }),
+            ...(isVideo
+              ? { videoUrl: finalUrl }
+              : isPdf
+              ? { fileUrl: finalUrl, fileName: file?.name }
+              : { imageUrl: finalUrl }),
           };
         }
 

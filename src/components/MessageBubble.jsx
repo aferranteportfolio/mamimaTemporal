@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef } from "react";
  *     chatId: string,
  *     from: "me" | "them",
  *     dir?: "in" | "out",
- *     type: "text" | "image" | "video" | "audio" | "location",
+ *     type: "text" | "image" | "video" | "audio" | "location" | "document" | "file",
  *     text?: string,
  *     imageUrl?: string,
  *     videoUrl?: string,
  *     audioUrl?: string,
  *     mediaId?: string,
+ *     fileUrl?: string,
+ *     fileName?: string,
  *     location?: {
  *       latitude?: number,
  *       longitude?: number,
@@ -51,6 +53,7 @@ export default function MessageBubble({ message, onReply, quoted }) {
   const isVideo    = message.type === "video";
   const isAudio    = message.type === "audio";
   const isLocation = message.type === "location";
+  const isDocument = message.type === "document" || message.type === "file";
 
   // IMAGE / VIDEO SRC
   const mediaSrc = useMemo(() => {
@@ -68,6 +71,11 @@ export default function MessageBubble({ message, onReply, quoted }) {
     }
     return undefined;
   }, [isImage, isVideo, message.imageUrl, message.videoUrl, message.mediaId]);
+
+  const documentSrc = useMemo(() => {
+    if (!isDocument) return undefined;
+    return message.fileUrl || message.url || (message.mediaId ? `/api/media/${message.mediaId}` : undefined);
+  }, [isDocument, message.fileUrl, message.url, message.mediaId]);
 
   // AUDIO SRC → usamos audioUrl (URL directa de WhatsApp)
   const audioSrc = useMemo(() => {
@@ -233,6 +241,35 @@ export default function MessageBubble({ message, onReply, quoted }) {
             playsInline
             style={{ maxWidth: 280, borderRadius: 8, display: "block" }}
           />
+          {message.text && (
+            <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+              {message.text}
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {/* DOCUMENT */}
+      {isDocument && documentSrc && (
+        <div style={{ maxWidth: 280 }}>
+          <a
+            href={documentSrc}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-block",
+              padding: "6px 12px",
+              borderRadius: 9999,
+              border: "1px solid #d1d5db",
+              background: "#111827",
+              color: "#f9fafb",
+              fontSize: 13,
+              textDecoration: "none",
+            }}
+          >
+            📄 {message.fileName || "Abrir documento"}
+          </a>
           {message.text && (
             <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
               {message.text}

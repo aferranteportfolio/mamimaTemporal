@@ -105,6 +105,27 @@ export async function sendVideoByMediaId(to, mediaId, caption = '') {
 }
 
 
+
+export async function sendDocumentByMediaId(to, mediaId, filename = '', caption = '') {
+  const url = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'document',
+      document: { id: mediaId, filename: filename || undefined, caption }
+    })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(`sendDocumentByMediaId failed: ${r.status} ${JSON.stringify(j)}`);
+  return j.messages?.[0]?.id; // wamid
+}
+
 export async function sendTextBack(to, text) {
 
   const toNormalized = normalizeToE164(to, '51'); // Peru

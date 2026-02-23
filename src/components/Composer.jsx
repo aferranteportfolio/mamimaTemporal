@@ -403,7 +403,7 @@ export default function Composer({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        multiple
         style={{ display: "none" }}
         onChange={onPickFile}
       />
@@ -412,7 +412,7 @@ export default function Composer({
         className="btn icon"
         onClick={() => fileRef.current && fileRef.current.click()}
         disabled={disabled}
-        title="Adjuntar imagen"
+        title="Adjuntar archivos"
       >
         📎
       </button>
@@ -536,14 +536,17 @@ export default function Composer({
 
   // -------------- local helpers using refs --------------
   async function onPickFile(e) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
+
     try {
-      await onSendImage(file);
+      for (const file of files) {
+        await onSendImage(file);
+      }
       taRef.current?.focus();
     } catch (err) {
-      alert("Failed to send image: " + (err?.message || String(err)));
+      alert("Failed to send attachment: " + (err?.message || String(err)));
     }
   }
 }

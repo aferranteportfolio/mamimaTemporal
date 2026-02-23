@@ -272,6 +272,7 @@ function normalizeHistoryMessage(raw) {
   let imageUrl = m.imageUrl || null;
   let videoUrl = m.videoUrl || null;
   let audioUrl = m.audioUrl || null;
+  let fileUrl = m.fileUrl || m.documentUrl || null;
 
   // ---- media URLs (fallbacks) ----
   if (type === "image" && !imageUrl) {
@@ -285,6 +286,10 @@ function normalizeHistoryMessage(raw) {
   if (type === "audio" && !audioUrl) {
     // Prefer direct WA URL if present, else fall back to proxy
     audioUrl = m.media?.url || (mediaId ? `/api/media/${mediaId}` : null);
+  }
+
+  if ((type === "document" || type === "file") && !fileUrl) {
+    fileUrl = m.media?.url || (mediaId ? `/api/media/${mediaId}` : null);
   }
 
   // ---- location normalization ----
@@ -328,6 +333,8 @@ function normalizeHistoryMessage(raw) {
     imageUrl: imageUrl || undefined,
     videoUrl: videoUrl || undefined,
     audioUrl: audioUrl || undefined,
+    fileUrl: fileUrl || undefined,
+    fileName: (type === "document" || type === "file") ? (m.fileName || m.media?.filename || m.media?.name || undefined) : undefined,
     location: location || undefined,
     locationUrl: locationUrl || undefined,
   };

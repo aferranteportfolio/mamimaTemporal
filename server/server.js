@@ -16,7 +16,7 @@ process.env.APP_ROOT = path.resolve(__dirname, "..");
 import { Product } from './dbFunctionality/schemas/schema.js';
 import { registerWaWebhook } from './wa/webhook.js';
 import { sendText, sendImage } from '../src/api/index.js';
-import { sendTextBack,uploadMediaToWhatsApp, sendImageByMediaId,sendVideoByMediaId } from './wa/send.js';
+import { sendTextBack,uploadMediaToWhatsApp, sendImageByMediaId,sendVideoByMediaId, sendDocumentByMediaId } from './wa/send.js';
 import { storeSentMessage } from './wa/message-store.js';
 import { waEvents, emitInbound } from "./wa/wa-events.js"; 
 import { installSse } from './realtime-sse.js';
@@ -1094,22 +1094,29 @@ app.post("/api/send-image", upload.single("file"), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing "file"' });
 
     const mime = (file.mimetype || "").toLowerCase();
-    const forcedKind = (req.body?.kind || "").toLowerCase(); // optional: "image" | "video"
+    const forcedKind = (req.body?.kind || "").toLowerCase(); // optional: "image" | "video" | "document"
     const isVideo = forcedKind ? forcedKind === "video" : mime.startsWith("video/");
+    const isDocument = forcedKind
+      ? forcedKind === "document"
+      : mime === "application/pdf" || mime.startsWith("application/");
 
     const IMAGE_OK = ["image/jpeg", "image/png", "image/webp", "image/gif"];
     const VIDEO_OK = ["video/mp4", "video/3gpp", "video/quicktime"];
+    const DOCUMENT_OK = ["application/pdf"];
 
-    if (!isVideo && !IMAGE_OK.includes(mime)) {
+    if (!isVideo && !isDocument && !IMAGE_OK.includes(mime)) {
       return res.status(415).json({ ok: false, error: `Unsupported image type: ${mime}` });
     }
     if (isVideo && !VIDEO_OK.includes(mime)) {
       return res.status(415).json({ ok: false, error: `Unsupported video type: ${mime}` });
     }
+    if (isDocument && !DOCUMENT_OK.includes(mime)) {
+      return res.status(415).json({ ok: false, error: `Unsupported document type: ${mime}` });
+    }
 
     const mediaId = await uploadMediaToWhatsApp({
       buffer: file.buffer,
-      filename: file.originalname || (isVideo ? "upload.mp4" : "upload.jpg"),
+      filename: file.originalname || (isVideo ? "upload.mp4" : isDocument ? "upload.pdf" : "upload.jpg"),
       mimetype: mime,
     });
 
@@ -1118,6 +1125,8 @@ app.post("/api/send-image", upload.single("file"), async (req, res) => {
 
     const wamid = isVideo
       ? await sendVideoByMediaId(to, mediaId, caption)
+      : isDocument
+      ? await sendDocumentByMediaId(to, mediaId, file.originalname || "document.pdf", caption)
       : await sendImageByMediaId(to, mediaId, caption);
 
     // 🔢 2) accepted
@@ -1130,7 +1139,7 @@ const dbPayload = {
   id: wamid,
   from: OUR_NUMBER,
   to,
-  type: isVideo ? "video" : "image",
+  type: isVideo ? "video" : isDocument ? "document" : "image",
   mediaId,
   mimeType: mime,
   message: caption || "",
@@ -1147,7 +1156,7 @@ const dbPayload = {
     await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
 
 
-    return res.json({ ok: true, id: wamid, mediaId, kind: isVideo ? "video" : "image" });
+    return res.json({ ok: true, id: wamid, mediaId, kind: isVideo ? "video" : isDocument ? "document" : "image" });
   } catch (err) {
     console.error("❌ /api/send-media error:", err);
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
