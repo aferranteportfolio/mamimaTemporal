@@ -3,6 +3,9 @@
 import fs from "node:fs";
 import { sendTextBack, uploadMediaToWhatsApp, sendImageByMediaId, sendVideoByMediaId } from "./send.js";
 import { enqueueText } from "./outbox.js";
+import { initializeCostumerAndStoreMessageHistory } from "../dbFunctionality/functionality.js";
+
+const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
 
 export async function sendTextMessage(toPhone, text, { runId = null, seq = null, nextAttemptAt = null } = {}) {
   const clean = String(text || "").trim();
@@ -28,11 +31,29 @@ export async function sendMediaMessage(toPhone, fileInfo) {
   });
 
   const kind = String(mimeType || "").toLowerCase().startsWith("video/") ? "video" : "image";
-  if (kind === "video") {
-    await sendVideoByMediaId(String(toPhone), mediaId, caption || "");
-    return;
-  }
+  const wamid =
+    kind === "video"
+      ? await sendVideoByMediaId(String(toPhone), mediaId, caption || "")
+      : await sendImageByMediaId(String(toPhone), mediaId, caption || "");
 
-  await sendImageByMediaId(String(toPhone), mediaId, caption || "");
+  if (!wamid) return null;
+
+  const ts = new Date().toISOString();
+  const dbPayload = {
+    id: wamid,
+    from: OUR_NUMBER,
+    to: String(toPhone),
+    type: kind,
+    mediaId,
+    mimeType,
+    message: caption || "",
+    caption: caption || "",
+    timestamp: ts,
+    dir: "out",
+    media: { id: mediaId, mimeType, timestamp: ts },
+  };
+
+  await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
+  return wamid;
 
 }
