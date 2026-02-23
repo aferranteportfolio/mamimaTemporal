@@ -210,8 +210,15 @@ function extractSimpleMessages(body) {
 
         const contextMessageId = m?.context?.id || null;
         const referral = m?.referral || null;
-        const isCtwa = referral?.source === "ads";
-        const mediaUrl = referral?.image_url || referral?.video_url || null;
+        const referralSource = String(referral?.source ?? referral?.source_type ?? "").toLowerCase();
+        const isCtwa = referralSource === "ads" || referralSource === "ad";
+        const mediaUrl =
+          referral?.image_url ||
+          referral?.video_url ||
+          referral?.thumbnail_url ||
+          referral?.media_url ||
+          referral?.source_url ||
+          null;
 
         const normalized = {
           from: safeDigits(m?.from),     // customer number (digits)
@@ -226,16 +233,18 @@ function extractSimpleMessages(body) {
           referral_type: isCtwa ? "ads" : null,
           referral_metadata: isCtwa
             ? {
-                ad_id: referral?.ad_id ?? null,
-                ad_name: referral?.ad_name ?? null,
+                ad_id: referral?.ad_id ?? referral?.source_id ?? null,
+                ad_name: referral?.ad_name ?? referral?.source_url ?? null,
                 adset_id: referral?.adset_id ?? null,
                 campaign_id: referral?.campaign_id ?? null,
-                headline: referral?.headline ?? null,
-                body: referral?.body ?? null,
-                source: referral?.source ?? null,
+                headline: referral?.headline ?? referral?.title ?? null,
+                body: referral?.body ?? referral?.description ?? null,
+                source: referral?.source ?? referral?.source_type ?? null,
                 media_url: mediaUrl,
-                image_url: referral?.image_url ?? null,
+                image_url: referral?.image_url ?? referral?.thumbnail_url ?? null,
                 video_url: referral?.video_url ?? null,
+                source_url: referral?.source_url ?? null,
+                source_id: referral?.source_id ?? null,
                 type: referral?.type ?? null,
               }
             : null,

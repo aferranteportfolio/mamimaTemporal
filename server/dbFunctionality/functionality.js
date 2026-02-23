@@ -141,10 +141,11 @@ function buildInboundMsg(src) {
   // Determine type using multiple hints
   const hintedType = isObj ? (src.type || src.media?.kind) : null;
   const referral = isObj ? (src.referral_metadata || src.referral || null) : null;
+  const referralSource = String(referral?.source ?? referral?.source_type ?? src?.referral_type ?? "").toLowerCase();
   const isCtwaReferral =
     hintedType === "ctwa_referral" ||
-    src?.referral_type === "ads" ||
-    referral?.source === "ads";
+    referralSource === "ads" ||
+    referralSource === "ad";
   let type = "text";
 
   if (isCtwaReferral) {
@@ -238,19 +239,21 @@ function buildInboundMsg(src) {
     interactive: isButtonReply
       ? { id: buttonReply.id, title: buttonReply.title }
       : undefined,
-    referral_type: isCtwaReferral ? "ads" : (src?.referral_type ?? null),
+    referral_type: isCtwaReferral ? "ads" : ((src?.referral_type || referral?.source || referral?.source_type) ?? null),
     referral_metadata: isCtwaReferral
       ? {
-          ad_id: referral?.ad_id ?? null,
-          ad_name: referral?.ad_name ?? null,
+          ad_id: referral?.ad_id ?? referral?.source_id ?? null,
+          ad_name: referral?.ad_name ?? referral?.source_url ?? null,
           adset_id: referral?.adset_id ?? null,
           campaign_id: referral?.campaign_id ?? null,
-          headline: referral?.headline ?? null,
-          body: referral?.body ?? null,
-          source: referral?.source ?? "ads",
-          media_url: referral?.media_url ?? referral?.image_url ?? referral?.video_url ?? null,
-          image_url: referral?.image_url ?? null,
+          headline: referral?.headline ?? referral?.title ?? null,
+          body: referral?.body ?? referral?.description ?? null,
+          source: referral?.source ?? referral?.source_type ?? "ads",
+          media_url: referral?.media_url ?? referral?.image_url ?? referral?.thumbnail_url ?? referral?.video_url ?? referral?.source_url ?? null,
+          image_url: referral?.image_url ?? referral?.thumbnail_url ?? null,
           video_url: referral?.video_url ?? null,
+          source_url: referral?.source_url ?? null,
+          source_id: referral?.source_id ?? null,
           type: referral?.type ?? null,
         }
       : (src?.referral_metadata ?? null),
