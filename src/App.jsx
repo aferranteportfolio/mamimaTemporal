@@ -96,11 +96,13 @@ function mapInboundToUi(raw) {
   const {
     from,
     to,
+    chatId: rawChatId,
     id,
     ts,
     type: rawType,
     text,
     media,
+    audioUrl: rawAudioUrl,
     location: rawLoc,
     referral_type,
     referral_metadata,
@@ -134,8 +136,8 @@ function mapInboundToUi(raw) {
 
   // AUDIO
   const audioUrl =
-    (type === 'audio' && media?.url)
-      ? media.url
+    (type === 'audio' && (rawAudioUrl || media?.url))
+      ? (rawAudioUrl || media?.url)
       : undefined;
 
   const fileUrl =
@@ -168,7 +170,7 @@ function mapInboundToUi(raw) {
     type,
     text: text ?? (media?.caption ?? null),
     media: mediaObj,
-    chatId: normalizeId(from).digits,
+        chatId: rawChatId || normalizeId(from).digits,
     dir: 'in',
     timestamp: whenIso,
     whenMs,
