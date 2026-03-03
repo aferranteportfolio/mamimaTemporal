@@ -163,75 +163,66 @@ function normalizeInboundMessage(raw) {
     raw?.__rawMessage?.referral ||
     raw?.__rawMessage?.context?.referral ||
     null;
+
+  const referralMetadata =
+    raw.referral_metadata ||
+    raw?.__rawMessage?.referral_metadata ||
+    null;
+
   const ctwaContext =
     raw?._data?.ctwaContext ||
     raw?.context?.ctwaContext ||
     raw?.__rawMessage?.context?.ctwaContext ||
     null;
 
-  // CASE 1: internal simplified message from extractSimpleMessages()
-  // {
-  //   from:"51915944684",
-  //   to:"51908008097",
-  //   id:"wamid....",
-  //   ts:"2025-11-01T16:38:23.000Z",
-  //   type:"text",
-  //   text:"faja"
-  // }
-  if (typeof raw.text === "string") {
-    const referralIsAd = referral?.source_type === "ad";
-    const ctwaHasText =
-      typeof ctwaContext?.title === "string" ||
-      typeof ctwaContext?.description === "string";
+  const referralSource = String(
+    referral?.source_type ||
+    referral?.source ||
+    referralMetadata?.source ||
+    raw?.referral_type ||
+    ""
+  ).toLowerCase();
 
+  const hintedType = String(raw?.type || "").toLowerCase();
+
+  const adTextHeadline =
+    (typeof referral?.headline === "string" && referral.headline.trim()) ||
+    (typeof referralMetadata?.headline === "string" && referralMetadata.headline.trim()) ||
+    (typeof ctwaContext?.title === "string" && ctwaContext.title.trim()) ||
+    "";
+
+  const adTextBody =
+    (typeof referral?.body === "string" && referral.body.trim()) ||
+    (typeof referralMetadata?.body === "string" && referralMetadata.body.trim()) ||
+    (typeof ctwaContext?.description === "string" && ctwaContext.description.trim()) ||
+    "";
+
+  const isAd = Boolean(
+    referralSource === "ad" ||
+    referralSource === "ads" ||
+    hintedType === "ctwa_referral" ||
+    adTextHeadline ||
+    adTextBody
+  );
+
+  // CASE 1: internal simplified message from extractSimpleMessages()
+  if (typeof raw.text === "string") {
     return {
       from: raw.from || "",
       to: raw.to || "",
       bodyText: raw.text.trim(),
-      isAd: Boolean(referralIsAd || ctwaHasText),
-      adTextHeadline:
-        (typeof referral?.headline === "string" && referral.headline.trim()) ||
-        (typeof ctwaContext?.title === "string" && ctwaContext.title.trim()) ||
-        "",
-      adTextBody:
-        (typeof referral?.body === "string" && referral.body.trim()) ||
-        (typeof ctwaContext?.description === "string" && ctwaContext.description.trim()) ||
-        "",
+      isAd,
+      adTextHeadline,
+      adTextBody,
       timestamp: raw.ts || raw.timestamp || new Date().toISOString()
     };
   }
 
   // CASE 2: direct WhatsApp webhook message
-  // {
-  //   from:"51915944684",
-  //   text:{ body:"faja" },
-  //   timestamp:"1762015103",
-  //   referral:{ source_type:"ad", headline:"..", body:".." }
-  // }
   const bodyText =
     (raw.text &&
       typeof raw.text.body === "string" &&
       raw.text.body.trim()) ||
-    "";
-
-  const isAd = !!(
-    (referral && referral.source_type === "ad") ||
-    (typeof ctwaContext?.title === "string") ||
-    (typeof ctwaContext?.description === "string")
-  );
-
-  const adTextHeadline =
-    (referral &&
-      typeof referral.headline === "string" &&
-      referral.headline.trim()) ||
-    (typeof ctwaContext?.title === "string" && ctwaContext.title.trim()) ||
-    "";
-
-  const adTextBody =
-    (referral &&
-      typeof referral.body === "string" &&
-      referral.body.trim()) ||
-    (typeof ctwaContext?.description === "string" && ctwaContext.description.trim()) ||
     "";
 
   return {
@@ -244,6 +235,7 @@ function normalizeInboundMessage(raw) {
     timestamp: raw.ts || raw.timestamp || new Date().toISOString()
   };
 }
+
 
 // --- checkMessageAndMatch ----------------------------------
 function checkMessageAndMatch(normMsg, callback, triggerArray, isAdCheck = false, config = {}) {
