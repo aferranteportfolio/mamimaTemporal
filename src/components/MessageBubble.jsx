@@ -73,6 +73,34 @@ export default function MessageBubble({ message, onReply, quoted }) {
   const hasCtwaMedia = !!(ctwaMediaHref || ctwaMediaSrc);
   const [ctwaMediaUnavailable, setCtwaMediaUnavailable] = useState(false);
 
+  const truncateText = (value, max = 30) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    return raw.length > max ? `${raw.slice(0, max)}…` : raw;
+  };
+
+  const ctwaHeadlineRaw = message.referral_metadata?.headline || "Ad referral";
+  const ctwaBodyRaw = message.referral_metadata?.body || "";
+  const ctwaPreviewText = truncateText(ctwaBodyRaw || ctwaHeadlineRaw, 30);
+
+  const customerCtwaText = (() => {
+    const customerText = String(message.text || "").trim();
+    if (!customerText) return "";
+
+    const normalizedCustomerText = customerText.toLowerCase();
+    const normalizedAdHeadline = String(ctwaHeadlineRaw || "").trim().toLowerCase();
+    const normalizedAdBody = String(ctwaBodyRaw || "").trim().toLowerCase();
+
+    if (
+      normalizedCustomerText &&
+      (normalizedCustomerText === normalizedAdHeadline || normalizedCustomerText === normalizedAdBody)
+    ) {
+      return "";
+    }
+
+    return customerText;
+  })();
+
   useEffect(() => {
     setCtwaMediaUnavailable(false);
   }, [message.id, ctwaMediaHref, ctwaMediaSrc]);
@@ -450,12 +478,16 @@ export default function MessageBubble({ message, onReply, quoted }) {
             <div className="ctwa-media-unavailable">Media unavailable</div>
           )}
 
-          <div className="ctwa-headline">
-            {message.referral_metadata?.headline || message.text || "Ad referral"}
-          </div>
+          <div className="ctwa-headline">{ctwaHeadlineRaw}</div>
 
-          {message.referral_metadata?.body && (
-            <div className="ctwa-body">{message.referral_metadata.body}</div>
+          {ctwaPreviewText && (
+            <div className="ctwa-body">{ctwaPreviewText}</div>
+          )}
+
+          {customerCtwaText && (
+            <div className="ctwa-customer-text" style={{ whiteSpace: "pre-wrap" }}>
+              {customerCtwaText}
+            </div>
           )}
 
           <div className="ctwa-meta">

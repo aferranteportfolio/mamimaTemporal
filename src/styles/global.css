@@ -1184,6 +1184,7 @@ body { background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-syst
 }
 .ctwa-headline { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
 .ctwa-body { font-size: 13px; line-height: 1.35; margin-bottom: 6px; white-space: pre-wrap; }
+.ctwa-customer-text { font-size: 13px; line-height: 1.35; margin-bottom: 6px; color: #1f2937; }
 .ctwa-meta { font-size: 11px; color: #2f4d36; }
 
 .ctwa-media-unavailable {

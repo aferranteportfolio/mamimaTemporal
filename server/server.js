@@ -235,6 +235,24 @@ function extractSimpleMessages(body) {
           referral?.source_url ||
           null;
 
+        const ctwaAdId = referral?.ad_id ?? referral?.source_id ?? null;
+        const ctwaText =
+          referral?.body ??
+          referral?.description ??
+          referral?.headline ??
+          referral?.title ??
+          pickText(m);
+
+        if (isCtwa) {
+          console.log("[WA][CTWA][TEXT]", {
+            wamid: m?.id ?? null,
+            from: safeDigits(m?.from),
+            to,
+            ad_id: ctwaAdId,
+            text: ctwaText ?? null,
+          });
+        }
+
         const normalized = {
           from: safeDigits(m?.from),     // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
