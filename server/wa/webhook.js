@@ -117,7 +117,19 @@ export function registerWaWebhook(app) {
 
               if (text) {
                 // Emit to FE
-                waEvents.emit('inbound', { from, to, text, ts, id: m.id, type });
+                waEvents.emit('inbound', {
+                  from,
+                  to,
+                  text,
+                  ts,
+                  id: m.id,
+                  type,
+                  // Preserve CTWA/ad metadata so auto-reply matching can
+                  // evaluate "responde a anuncios" triggers against ad text.
+                  referral: m.referral || null,
+                  context: m.context || null,
+                  __rawMessage: m,
+                });
                 L('INBOUND', 'emit inbound', { event: 'inbound', to, from, ts });
 
                 // Persist

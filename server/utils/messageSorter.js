@@ -157,6 +157,18 @@ function normalizeInboundMessage(raw) {
     };
   }
 
+  const referral =
+    raw.referral ||
+    raw?.context?.referral ||
+    raw?.__rawMessage?.referral ||
+    raw?.__rawMessage?.context?.referral ||
+    null;
+  const ctwaContext =
+    raw?._data?.ctwaContext ||
+    raw?.context?.ctwaContext ||
+    raw?.__rawMessage?.context?.ctwaContext ||
+    null;
+
   // CASE 1: internal simplified message from extractSimpleMessages()
   // {
   //   from:"51915944684",
@@ -167,13 +179,24 @@ function normalizeInboundMessage(raw) {
   //   text:"faja"
   // }
   if (typeof raw.text === "string") {
+    const referralIsAd = referral?.source_type === "ad";
+    const ctwaHasText =
+      typeof ctwaContext?.title === "string" ||
+      typeof ctwaContext?.description === "string";
+
     return {
       from: raw.from || "",
       to: raw.to || "",
       bodyText: raw.text.trim(),
-      isAd: false,
-      adTextHeadline: "",
-      adTextBody: "",
+      isAd: Boolean(referralIsAd || ctwaHasText),
+      adTextHeadline:
+        (typeof referral?.headline === "string" && referral.headline.trim()) ||
+        (typeof ctwaContext?.title === "string" && ctwaContext.title.trim()) ||
+        "",
+      adTextBody:
+        (typeof referral?.body === "string" && referral.body.trim()) ||
+        (typeof ctwaContext?.description === "string" && ctwaContext.description.trim()) ||
+        "",
       timestamp: raw.ts || raw.timestamp || new Date().toISOString()
     };
   }
@@ -191,18 +214,24 @@ function normalizeInboundMessage(raw) {
       raw.text.body.trim()) ||
     "";
 
-  const isAd = !!(raw.referral && raw.referral.source_type === "ad");
+  const isAd = !!(
+    (referral && referral.source_type === "ad") ||
+    (typeof ctwaContext?.title === "string") ||
+    (typeof ctwaContext?.description === "string")
+  );
 
   const adTextHeadline =
-    (raw.referral &&
-      typeof raw.referral.headline === "string" &&
-      raw.referral.headline.trim()) ||
+    (referral &&
+      typeof referral.headline === "string" &&
+      referral.headline.trim()) ||
+    (typeof ctwaContext?.title === "string" && ctwaContext.title.trim()) ||
     "";
 
   const adTextBody =
-    (raw.referral &&
-      typeof raw.referral.body === "string" &&
-      raw.referral.body.trim()) ||
+    (referral &&
+      typeof referral.body === "string" &&
+      referral.body.trim()) ||
+    (typeof ctwaContext?.description === "string" && ctwaContext.description.trim()) ||
     "";
 
   return {
