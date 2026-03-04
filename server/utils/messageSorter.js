@@ -19,6 +19,7 @@ const PRODUCT_VALUE_DEFAULT = "89";   // string
 const SHIPPING_INFO_DEFAULT = "1";    // string
 const QUANTITY_DEFAULT = 0;           // number
 const SHIPPING_VALUE_DEFAULT = "14";  // string
+const WEEKLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * actuallySendSavedReplyObject
@@ -317,6 +318,29 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeCustomerId(value) {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+async function hasWeeklyCooldownActive(toPhone, savedReplyTitle) {
+  const customerId = normalizeCustomerId(toPhone);
+  if (!customerId || !savedReplyTitle) return false;
+
+  const product = await Product.findOne({ customer_id: customerId }).lean();
+  const productObjects = product?.state?.[0]?.productObject;
+  if (!Array.isArray(productObjects)) return false;
+
+  const entry = productObjects.find(
+    (obj) => obj?.product_info_requested === savedReplyTitle
+  );
+  if (!entry?.timestamp) return false;
+
+  const lastSentAt = new Date(entry.timestamp);
+  if (Number.isNaN(lastSentAt.getTime())) return false;
+
+  return Date.now() - lastSentAt.getTime() < WEEKLY_COOLDOWN_MS;
+}
+
 
 /**
  * actuallySendSavedReplyObject
@@ -328,22 +352,30 @@ function nowIso() {
 export async function actuallySendSavedReplyObject(toPhone, savedReply, folderName, miscCfg) {
   console.log(`[autoReplyEngine] 📨 REQUEST TO SEND "${savedReply.title}" ->`, toPhone);
 
+  if (miscCfg?.c) {
+    const isBlockedByCooldown = await hasWeeklyCooldownActive(toPhone, savedReply.title);
+    if (isBlockedByCooldown) {
+      console.log(
+        `[autoReplyEngine] ⏭ Weekly cooldown active for "${savedReply.title}" -> ${toPhone}. Skipping send.`
+      );
+      return;
+    }
+  }
+
   // 1) DB logging
   try {
     if (miscCfg?.d) {
-      const okProduct = await updateProductObejctByID(
+      await updateProductObejctByID(
         toPhone,
         savedReply.title,
         PRODUCT_VALUE_DEFAULT,
         SHIPPING_INFO_DEFAULT,
         QUANTITY_DEFAULT
       );
-      if (okProduct === false) return;
     }
 
     if (miscCfg?.f) {
-      const okShip = await updateShippingStatusByID(toPhone, SHIPPING_VALUE_DEFAULT);
-      if (okShip === false) return;
+      await updateShippingStatusByID(toPhone, SHIPPING_VALUE_DEFAULT);
     }
   } catch (err) {
     console.error("[autoReplyEngine] ⚠ DB logging failed; aborting send:", err);
