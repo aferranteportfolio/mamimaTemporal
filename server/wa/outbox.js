@@ -3,16 +3,30 @@ import mongoose from "mongoose";
 import { createJsonlLogger, makeRunId } from "./outbox-logger.js";
 import { storeAcceptedText } from "./outbox-store.js";
 import { initializeCostumerAndStoreMessageHistory } from "../dbFunctionality/functionality.js";
+import fs from "node:fs";
+import {
+  uploadMediaToWhatsApp,
+  sendImageByMediaId,
+  sendVideoByMediaId,
+  sendDocumentByMediaId,
+} from "./send.js";
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
 
 
 const OutboxSchema = new mongoose.Schema(
   {
-    kind: { type: String, enum: ["text"], default: "text" },
+    kind: { type: String, enum: ["text", "image", "video", "document"], default: "text" },
 
     to: { type: String, required: true, index: true },
     text: { type: String, required: true },
+    media: {
+      filePath: { type: String, default: null },
+      mimeType: { type: String, default: null },
+      originalName: { type: String, default: null },
+      caption: { type: String, default: null },
+      mediaId: { type: String, default: null },
+    },
     contextMessageId: { type: String, default: null, index: true },
 
     state: {
@@ -54,6 +68,42 @@ export async function enqueueText({
     to,
     text,
     contextMessageId: contextMessageId || null,
+    runId,
+    seq,
+    state: "pending",
+    attempts: 0,
+    nextAttemptAt: nextAttemptAt ?? new Date(),
+  });
+}
+
+export async function enqueueMedia({
+  to,
+  filePath,
+  mimeType,
+  originalName = null,
+  caption = "",
+  runId = null,
+  seq = null,
+  nextAttemptAt = null,
+}) {
+  const lowMime = String(mimeType || "").toLowerCase();
+  const kind = lowMime.startsWith("video/")
+    ? "video"
+    : lowMime.startsWith("application/")
+      ? "document"
+      : "image";
+
+  return OutboxMessage.create({
+    kind,
+    to,
+    text: String(caption || ""),
+    media: {
+      filePath,
+      mimeType,
+      originalName,
+      caption: String(caption || ""),
+      mediaId: null,
+    },
     runId,
     seq,
     state: "pending",
@@ -138,6 +188,41 @@ async function metaSendText({ token, phoneId, to, text, contextMessageId = null 
   return { ok: res.ok, status: res.status, json, wamid, errCode, retryAfterMs };
 }
 
+async function metaSendMedia(item) {
+  const filePath = item?.media?.filePath;
+  if (!filePath) throw new Error("Missing media.filePath in outbox message");
+
+  const mimeType = item?.media?.mimeType || "application/octet-stream";
+  const originalName = item?.media?.originalName || "file";
+  const caption = item?.media?.caption || item?.text || "";
+
+  const fileBuffer = fs.readFileSync(filePath);
+  const mediaId = await uploadMediaToWhatsApp({
+    buffer: fileBuffer,
+    mimeType,
+    filename: originalName,
+  });
+
+  let wamid = null;
+  if (item.kind === "video") {
+    wamid = await sendVideoByMediaId(item.to, mediaId, caption);
+  } else if (item.kind === "document") {
+    wamid = await sendDocumentByMediaId(item.to, mediaId, originalName, caption);
+  } else {
+    wamid = await sendImageByMediaId(item.to, mediaId, caption);
+  }
+
+  return {
+    ok: !!wamid,
+    status: wamid ? 200 : 0,
+    json: wamid ? { messages: [{ id: wamid }] } : null,
+    wamid,
+    errCode: null,
+    retryAfterMs: 0,
+    mediaId,
+  };
+}
+
 function jitter(ms = 250) {
   return Math.floor((Math.random() * 2 - 1) * ms);
 }
@@ -197,7 +282,12 @@ export function startOutboxWorker({
     cfg: { rps, burst, minGap, maxRetries },
   });
 
+  let isTickRunning = false;
   setInterval(async () => {
+    if (isTickRunning) return;
+    isTickRunning = true;
+
+    try {
     const now = new Date();
 
     const batch = await OutboxMessage.find({
@@ -219,6 +309,31 @@ export function startOutboxWorker({
 
       if (!locked) continue;
 
+      // Strict in-run ordering: if this item belongs to a sequenced run,
+      // only send when the immediate predecessor is already accepted.
+      const hasSeq = Number.isInteger(locked.seq);
+      if (locked.runId && hasSeq && locked.seq > 0) {
+        const prev = await OutboxMessage.findOne({
+          runId: locked.runId,
+          seq: locked.seq - 1,
+        })
+          .select({ state: 1 })
+          .lean();
+
+        if (!prev || prev.state !== "accepted") {
+          await OutboxMessage.updateOne(
+            { _id: locked._id, state: "sending" },
+            {
+              $set: {
+                state: "pending",
+                nextAttemptAt: new Date(Date.now() + 250),
+              },
+            }
+          );
+          continue;
+        }
+      }
+
       // throttles
       await bucket.take(1);
       await pairLimiter.waitTurn(locked.to);
@@ -228,13 +343,16 @@ export function startOutboxWorker({
       const t0 = Date.now();
 
       try {
-        const r = await metaSendText({
-          token,
-          phoneId,
-          to: locked.to,
-          text: locked.text,
-          contextMessageId: locked.contextMessageId || null,
-        });
+        const r =
+          locked.kind === "text"
+            ? await metaSendText({
+                token,
+                phoneId,
+                to: locked.to,
+                text: locked.text,
+                contextMessageId: locked.contextMessageId || null,
+              })
+            : await metaSendMedia(locked);
 
         // log attempt (stress-test style)
         logger.write({
@@ -256,7 +374,9 @@ export function startOutboxWorker({
 
   // ✅ accepted side-effects
   incApiAccepted();
-  muletillas(locked.text, locked.to);
+          if (locked.kind === "text") {
+            muletillas(locked.text, locked.to);
+          }
 
   const ts = new Date().toISOString();
 
@@ -265,17 +385,29 @@ export function startOutboxWorker({
     id: r.wamid,
     from: OUR_NUMBER,
     to: locked.to,
-    type: "text",
-    message: locked.text,
-    timestamp: ts,
-    dir: "out",
+            type: locked.kind,
+            message: locked.text,
+            timestamp: ts,
+            dir: "out",
 
     // extra fields for your UI / dedupe
     status: "sent",
-    outboxId: String(locked._id),
-    contextMessageId: locked.contextMessageId || null,
-    replyToId: locked.contextMessageId || null,
-  };
+            outboxId: String(locked._id),
+            contextMessageId: locked.contextMessageId || null,
+            replyToId: locked.contextMessageId || null,
+            ...(locked.kind !== "text"
+              ? {
+                  mediaId: r.mediaId || locked?.media?.mediaId || null,
+                  mimeType: locked?.media?.mimeType || null,
+                  caption: locked?.media?.caption || locked.text || "",
+                  media: {
+                    id: r.mediaId || locked?.media?.mediaId || null,
+                    mimeType: locked?.media?.mimeType || null,
+                    timestamp: ts,
+                  },
+                }
+              : {}),
+          };
 
   try {
     await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
@@ -309,11 +441,12 @@ export function startOutboxWorker({
         wamid: r.wamid,
         lastHttpStatus: r.status,
         lastErrorCode: null,
-        lastError: null,
-        nextAttemptAt: null,
-      },
-      $inc: { attempts: 1 },
-    }
+                lastError: null,
+                nextAttemptAt: null,
+                ...(r.mediaId ? { "media.mediaId": r.mediaId } : {}),
+              },
+              $inc: { attempts: 1 },
+            }
   );
 
   continue;
@@ -394,6 +527,9 @@ export function startOutboxWorker({
           }
         );
       }
+    }
+    } finally {
+      isTickRunning = false;
     }
   }, 200);
 

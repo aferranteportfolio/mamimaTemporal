@@ -354,6 +354,7 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
   const delayMs = Number(miscCfg?.delayMs ?? SAVED_REPLY_DELAY_MS); // 15000
   const gapMs   = Number(miscCfg?.gapMs ?? 700);                   // spacing between bubbles
   const baseMs  = Date.now() + Math.max(0, delayMs);
+  const runId = `sr:${folderName}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 
   let k = 0;
   const messages = Array.isArray(savedReply?.messages) ? savedReply.messages : [];
@@ -368,7 +369,7 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
       const runAt = new Date(baseMs + k * gapMs);
       console.log(`[autoReplyEngine]   text scheduled @ ${runAt.toISOString()} => ${JSON.stringify(text)}`);
 
-      await sendTextMessage(toPhone, text, { nextAttemptAt: runAt });
+      await sendTextMessage(toPhone, text, { runId, seq: k, nextAttemptAt: runAt });
       k++;
     }
 
@@ -386,8 +387,10 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
         await sendMediaMessage(toPhone, {
           filePath: absoluteFilePath,
           mimeType: f.mimeType || "image/jpeg",
-           originalName: f.name || f.storedName || "file",
+          originalName: f.name || f.storedName || "file",
           caption: i === 0 ? text : "",
+          runId,
+          seq: k,
 
           nextAttemptAt: runAt, // 👈 you'll need to wire this inside sendMediaMessage
         });

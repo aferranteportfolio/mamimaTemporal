@@ -96,8 +96,13 @@ export function startOutboxWorker() {
     maxRetries,
   });
 
-  // simple poll loop
+  // simple poll loop (non-reentrant)
+  let isTickRunning = false;
   setInterval(async () => {
+    if (isTickRunning) return;
+    isTickRunning = true;
+
+    try {
     // fetch a small batch
     const now = new Date();
 
@@ -119,6 +124,22 @@ export function startOutboxWorker() {
       ).lean();
 
       if (!locked) continue;
+
+      // Keep strict order inside the same logical run.
+      const hasSeq = Number.isInteger(locked.seq);
+      if (locked.runId && hasSeq && locked.seq > 0) {
+        const prev = await OutboxMessage.findOne({ runId: locked.runId, seq: locked.seq - 1 })
+          .select({ state: 1 })
+          .lean();
+
+        if (!prev || prev.state !== "accepted") {
+          await OutboxMessage.updateOne(
+            { _id: locked._id, state: "sending" },
+            { $set: { state: "pending", nextAttemptAt: new Date(Date.now() + 250) } }
+          );
+          continue;
+        }
+      }
 
       // global rate + per-recipient spacing
       await bucket.take(1);
@@ -184,6 +205,9 @@ export function startOutboxWorker() {
         // small yield so we don't spin too hard on repeated failures
         await sleep(20);
       }
+    }
+    } finally {
+      isTickRunning = false;
     }
   }, 200);
 }
