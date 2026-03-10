@@ -19,7 +19,13 @@ const OutboxSchema = new mongoose.Schema(
     kind: { type: String, enum: ["text", "image", "video", "document"], default: "text" },
 
     to: { type: String, required: true, index: true },
-    text: { type: String, required: true },
+    text: {
+      type: String,
+      default: "",
+      required: function requiredTextForTextKind() {
+        return this.kind === "text";
+      },
+    },
     media: {
       filePath: { type: String, default: null },
       mimeType: { type: String, default: null },
