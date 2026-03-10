@@ -1,11 +1,6 @@
 // server/wa/outbound-wrapper.js
 
-import fs from "node:fs";
-import { sendTextBack, uploadMediaToWhatsApp, sendImageByMediaId, sendVideoByMediaId } from "./send.js";
-import { enqueueText } from "./outbox.js";
-import { initializeCostumerAndStoreMessageHistory } from "../dbFunctionality/functionality.js";
-
-const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
+import { enqueueText, enqueueMedia } from "./outbox.js";
 
 export async function sendTextMessage(toPhone, text, { runId = null, seq = null, nextAttemptAt = null } = {}) {
   const clean = String(text || "").trim();
@@ -17,43 +12,19 @@ export async function sendTextMessage(toPhone, text, { runId = null, seq = null,
 
 
 export async function sendMediaMessage(toPhone, fileInfo) {
-    const { filePath, mimeType, originalName, caption } = fileInfo || {};
+    const { filePath, mimeType, originalName, caption, runId = null, seq = null, nextAttemptAt = null } = fileInfo || {};
   if (!filePath) return null;
 
-  console.log("[outbound-wrapper] DIRECT → MEDIA to", toPhone, filePath, mimeType);
-
-  const fileBuffer = fs.readFileSync(filePath);
-
-  const mediaId = await uploadMediaToWhatsApp({
-    buffer: fileBuffer,
-    mimeType,
-    filename: originalName
-  });
-
-  const kind = String(mimeType || "").toLowerCase().startsWith("video/") ? "video" : "image";
-  const wamid =
-    kind === "video"
-      ? await sendVideoByMediaId(String(toPhone), mediaId, caption || "")
-      : await sendImageByMediaId(String(toPhone), mediaId, caption || "");
-
-  if (!wamid) return null;
-
-  const ts = new Date().toISOString();
-  const dbPayload = {
-    id: wamid,
-    from: OUR_NUMBER,
+  console.log("[outbound-wrapper] ENQUEUE → MEDIA to", toPhone, filePath, mimeType);
+  return enqueueMedia({
     to: String(toPhone),
-    type: kind,
-    mediaId,
+    filePath,
     mimeType,
-    message: caption || "",
+    originalName,
     caption: caption || "",
-    timestamp: ts,
-    dir: "out",
-    media: { id: mediaId, mimeType, timestamp: ts },
-  };
-
-  await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
-  return wamid;
+    runId,
+    seq,
+    nextAttemptAt,
+  });
 
 }
