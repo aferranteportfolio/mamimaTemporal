@@ -309,6 +309,31 @@ export function startOutboxWorker({
 
       if (!locked) continue;
 
+      // Strict in-run ordering: if this item belongs to a sequenced run,
+      // only send when the immediate predecessor is already accepted.
+      const hasSeq = Number.isInteger(locked.seq);
+      if (locked.runId && hasSeq && locked.seq > 0) {
+        const prev = await OutboxMessage.findOne({
+          runId: locked.runId,
+          seq: locked.seq - 1,
+        })
+          .select({ state: 1 })
+          .lean();
+
+        if (!prev || prev.state !== "accepted") {
+          await OutboxMessage.updateOne(
+            { _id: locked._id, state: "sending" },
+            {
+              $set: {
+                state: "pending",
+                nextAttemptAt: new Date(Date.now() + 250),
+              },
+            }
+          );
+          continue;
+        }
+      }
+
       // throttles
       await bucket.take(1);
       await pairLimiter.waitTurn(locked.to);
