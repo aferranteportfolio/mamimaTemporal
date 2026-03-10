@@ -96,8 +96,13 @@ export function startOutboxWorker() {
     maxRetries,
   });
 
-  // simple poll loop
+  // simple poll loop (non-reentrant)
+  let isTickRunning = false;
   setInterval(async () => {
+    if (isTickRunning) return;
+    isTickRunning = true;
+
+    try {
     // fetch a small batch
     const now = new Date();
 
@@ -184,6 +189,9 @@ export function startOutboxWorker() {
         // small yield so we don't spin too hard on repeated failures
         await sleep(20);
       }
+    }
+    } finally {
+      isTickRunning = false;
     }
   }, 200);
 }

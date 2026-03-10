@@ -282,7 +282,12 @@ export function startOutboxWorker({
     cfg: { rps, burst, minGap, maxRetries },
   });
 
+  let isTickRunning = false;
   setInterval(async () => {
+    if (isTickRunning) return;
+    isTickRunning = true;
+
+    try {
     const now = new Date();
 
     const batch = await OutboxMessage.find({
@@ -497,6 +502,9 @@ export function startOutboxWorker({
           }
         );
       }
+    }
+    } finally {
+      isTickRunning = false;
     }
   }, 200);
 
