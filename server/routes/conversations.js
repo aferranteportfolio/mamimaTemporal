@@ -3,16 +3,21 @@ import express from 'express';
 import { Product } from '../dbFunctionality/schemas/schema.js';
 
 export const conversationsRouter = express.Router();
+const OUR_NUMBER = String(process.env.OUR_NUMBER || process.env.WHATSAPP_SENDER || '').trim();
 
 /**
  * GET /api/conversations
  * Returns the sidebar list with durable unread counts.
  */
 conversationsRouter.get('/api/conversations', async (req, res) => {
-  const seller = req.query.seller || '51908008097';
+  const seller = OUR_NUMBER;
   try {
+    if (!seller) {
+      return res.status(500).json({ ok: false, error: 'OUR_NUMBER is not configured' });
+    }
+
     // Pull only what we need (lean for speed)
-    const docs = await Product.find({}, {
+    const docs = await Product.find({ latestSeller: seller }, {
       customer_id: 1,
       latestSeller: 1,
       lastInboundTs: 1,

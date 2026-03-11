@@ -799,13 +799,10 @@ const q = local9;
     try {
       setIsSearching(true);
 
-      const seller = "51908008097"; // or wherever you store your current seller
       const baseUrl = import.meta.env.VITE_API_URL; // you already use this
 
       const res = await fetch(
-        `${baseUrl}/api/conversations/search?seller=${encodeURIComponent(
-          seller
-        )}&q=${encodeURIComponent(q)}&limit=50`,
+        `${baseUrl}/api/conversations/search?q=${encodeURIComponent(q)}&limit=50`,
         { signal: controller.signal }
       );
 

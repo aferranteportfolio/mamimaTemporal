@@ -56,7 +56,7 @@ import http from 'node:http';
 import express from 'express';
 
 
-const OUR_NUMBER = process.env.OUR_NUMBER || process.env.WHATSAPP_SENDER || '';
+const OUR_NUMBER = String(process.env.OUR_NUMBER || process.env.WHATSAPP_SENDER || '').trim();
 const DEV_ORIGIN = 'http://localhost:5173';
 
 const app = express();
@@ -735,7 +735,11 @@ app.use((req, res, next) => {
 // GET /api/conversations
 app.get('/api/conversations', async (req, res) => {
   try {
-    const seller = String(req.query.seller || '51908008097');
+    const seller = OUR_NUMBER;
+
+    if (!seller) {
+      return res.status(500).json({ ok: false, error: 'OUR_NUMBER is not configured' });
+    }
 
     const limit = Math.min(
       parseInt(req.query.limit ?? '700', 10) || 700,
@@ -801,7 +805,11 @@ app.get('/api/conversations', async (req, res) => {
 
 app.get('/api/conversations/search', async (req, res) => {
   try {
-    const seller = String(req.query.seller || '51908008097');
+    const seller = OUR_NUMBER;
+
+    if (!seller) {
+      return res.status(500).json({ ok: false, error: 'OUR_NUMBER is not configured' });
+    }
     const rawQ = String(req.query.q || '').trim();
     const limit = Math.min(parseInt(req.query.limit ?? '50', 10) || 50, 200);
 
