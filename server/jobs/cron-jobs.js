@@ -57,10 +57,10 @@ async function runQuery(name, queryFn) {
     const results = await queryFn();
 
     if (Array.isArray(results) && results.length > 0) {
-      // If you want to insert tasks again, uncomment this and the import:
-       await insertMessageTasks(results);
-       console.log(`✅ [CRON][${name}] inserted ${results.length} entries`);
-      console.log(`✅ [CRON][${name}] got ${results.length} results (insertMessageTasks disabled)`);
+      const { insertedCount, duplicateCount } = await insertMessageTasks(results);
+      console.log(
+        `✅ [CRON][${name}] got ${results.length} results | inserted=${insertedCount} | duplicates=${duplicateCount}`
+      );
     } else {
       console.log(`⚠️  [CRON][${name}] no results`);
     }
