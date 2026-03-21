@@ -259,6 +259,25 @@ function baseObsFields(item, extra = {}) {
   };
 }
 
+function computePrevSeqRetryMs({ prevState, minGapMs }) {
+  const configured = Math.max(250, Number(process.env.OUTBOX_PREV_SEQ_RETRY_MS ?? "1500"));
+  const halfGap = minGapMs > 0 ? Math.max(1000, Math.floor(minGapMs / 2)) : configured;
+
+  if (prevState === "sending") {
+    return Math.max(configured, halfGap);
+  }
+
+  if (prevState === "pending") {
+    return Math.max(configured * 2, halfGap);
+  }
+
+  if (prevState === "failed") {
+    return Math.max(configured * 3, minGapMs || configured);
+  }
+
+  return configured;
+}
+
 // ---------- Worker ----------
 export function startOutboxWorker({
   token,
@@ -363,19 +382,25 @@ export function startOutboxWorker({
         }));
 
         if (!prev || prev.state !== "accepted") {
+          const blockedRetryMs = computePrevSeqRetryMs({
+            prevState: prev?.state ?? null,
+            minGapMs: minGap,
+          });
+
           await OutboxMessage.updateOne(
             { _id: locked._id, state: "sending" },
             {
               $set: {
                 state: "pending",
-                nextAttemptAt: new Date(Date.now() + 250),
+                nextAttemptAt: new Date(Date.now() + blockedRetryMs),
               },
             }
           );
           emitObs("outbox.worker.prev_seq_blocked", baseObsFields(locked, {
             prevSeq: locked.seq - 1,
             prevSeqState: prev?.state ?? null,
-            rescheduledInMs: 250,
+            state: "pending",
+            rescheduledInMs: blockedRetryMs,
           }));
           continue;
         }

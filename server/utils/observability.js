@@ -26,15 +26,18 @@ export function durationMs(startMs) {
 export function emitObs(event, payload = {}) {
   if (!OBS_ENABLED) return;
 
+  const sanitizedPayload = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    sanitizedPayload[key] = safeJson(value);
+  }
+
   const body = {
     ts: new Date().toISOString(),
+    ...sanitizedPayload,
     kind: "obs",
     event,
   };
-
-  for (const [key, value] of Object.entries(payload)) {
-    body[key] = safeJson(value);
-  }
 
   console.log(JSON.stringify(body));
 }
