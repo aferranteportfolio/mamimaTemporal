@@ -50,6 +50,7 @@ import {
   // legacy aliases still exist, but we’ll use the explicit ones here
 } from "./metrics/wa-message-counter.js";
 import { startOutboxWorker } from "./wa/outbox.js";
+import { durationMs, emitObs, nowMs } from "./utils/observability.js";
 
 import http from 'node:http';
 // server/server.js
@@ -1031,6 +1032,7 @@ import { enqueueText } from "./wa/outbox.js";
 import { storeQueuedText } from "./wa/outbox-store.js";
 
 app.post("/api/send-text", async (req, res) => {
+  const reqStartedAt = nowMs();
   try {
     const { to, text, contextMessageId } = req.body || {};
 
@@ -1050,11 +1052,34 @@ app.post("/api/send-text", async (req, res) => {
     incServerAttempts();
 
     // 1) enqueue (store ctx in outbox)
+    const enqueueStartedAt = nowMs();
     const doc = await enqueueText({ to, text: cleanText, contextMessageId: ctx });
+    const enqueueMs = durationMs(enqueueStartedAt);
     const outboxId = String(doc._id);
+    emitObs("outbox.enqueue.created", {
+      outboxId,
+      to,
+      kind: "text",
+      contextMessageId: ctx,
+      enqueueMs,
+      requestToEnqueueMs: durationMs(reqStartedAt),
+      source: "api.send-text",
+    });
 
     // 2) store queued placeholder in DB (store ctx there too)
+    const dbPlaceholderStartedAt = nowMs();
     const tempId = await storeQueuedText({ to, text: cleanText, outboxId, contextMessageId: ctx });
+    const dbPlaceholderMs = durationMs(dbPlaceholderStartedAt);
+    emitObs("outbox.enqueue.placeholder_stored", {
+      outboxId,
+      tempId,
+      to,
+      kind: "text",
+      contextMessageId: ctx,
+      dbPlaceholderMs,
+      totalEnqueuePathMs: durationMs(reqStartedAt),
+      source: "api.send-text",
+    });
 
     return res.json({
       ok: true,
@@ -1065,6 +1090,13 @@ app.post("/api/send-text", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
+    emitObs("outbox.enqueue.error", {
+      to: req.body?.to || null,
+      kind: "text",
+      totalEnqueuePathMs: durationMs(reqStartedAt),
+      error: String(err?.message || err),
+      source: "api.send-text",
+    });
     console.error("❌ /api/send-text error:", err);
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }

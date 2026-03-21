@@ -10,6 +10,7 @@ import {
   sendVideoByMediaId,
   sendDocumentByMediaId,
 } from "./send.js";
+import { durationMs, emitObs, nowMs } from "../utils/observability.js";
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
 
@@ -245,6 +246,19 @@ function computeBackoffMs({ attempt, errCode, retryAfterMs }) {
   return Math.max(0, wait + jitter(250));
 }
 
+function baseObsFields(item, extra = {}) {
+  return {
+    outboxId: String(item?._id || ""),
+    runId: item?.runId ?? null,
+    seq: item?.seq ?? null,
+    to: item?.to ?? null,
+    kind: item?.kind ?? null,
+    state: item?.state ?? null,
+    attempts: item?.attempts ?? 0,
+    ...extra,
+  };
+}
+
 // ---------- Worker ----------
 export function startOutboxWorker({
   token,
@@ -305,8 +319,16 @@ export function startOutboxWorker({
       .limit(25)
       .lean();
 
+    if (batch.length > 0) {
+      emitObs("outbox.worker.batch_loaded", {
+        batchSize: batch.length,
+        pendingStates: ["pending", "failed"],
+      });
+    }
+
     for (const item of batch) {
       // lock
+      const lockStartedAt = nowMs();
       const locked = await OutboxMessage.findOneAndUpdate(
         { _id: item._id, state: item.state },
         { $set: { state: "sending" } },
@@ -315,16 +337,30 @@ export function startOutboxWorker({
 
       if (!locked) continue;
 
+      emitObs("outbox.worker.lock_acquired", baseObsFields(locked, {
+        previousState: item.state,
+        lockWaitMs: durationMs(lockStartedAt),
+        queueAgeMs: locked?.createdAt ? Math.max(0, Date.now() - new Date(locked.createdAt).getTime()) : null,
+        eligibleLagMs: locked?.nextAttemptAt ? Math.max(0, Date.now() - new Date(locked.nextAttemptAt).getTime()) : null,
+      }));
+
       // Strict in-run ordering: if this item belongs to a sequenced run,
       // only send when the immediate predecessor is already accepted.
       const hasSeq = Number.isInteger(locked.seq);
       if (locked.runId && hasSeq && locked.seq > 0) {
+        const prevSeqStartedAt = nowMs();
         const prev = await OutboxMessage.findOne({
           runId: locked.runId,
           seq: locked.seq - 1,
         })
           .select({ state: 1 })
           .lean();
+
+        emitObs("outbox.worker.prev_seq_checked", baseObsFields(locked, {
+          prevSeq: locked.seq - 1,
+          prevSeqState: prev?.state ?? null,
+          prevSeqCheckMs: durationMs(prevSeqStartedAt),
+        }));
 
         if (!prev || prev.state !== "accepted") {
           await OutboxMessage.updateOne(
@@ -336,17 +372,40 @@ export function startOutboxWorker({
               },
             }
           );
+          emitObs("outbox.worker.prev_seq_blocked", baseObsFields(locked, {
+            prevSeq: locked.seq - 1,
+            prevSeqState: prev?.state ?? null,
+            rescheduledInMs: 250,
+          }));
           continue;
         }
       }
 
       // throttles
+      const bucketStartedAt = nowMs();
       await bucket.take(1);
+      const bucketWaitMs = durationMs(bucketStartedAt);
+
+      const pairWaitStartedAt = nowMs();
       await pairLimiter.waitTurn(locked.to);
+      const pairWaitMs = durationMs(pairWaitStartedAt);
+
+      emitObs("outbox.worker.dispatch_ready", baseObsFields(locked, {
+        bucketWaitMs,
+        pairWaitMs,
+      }));
 
       const attemptNo = (locked.attempts || 0) + 1;
       const msgText = shortText(locked.text);
       const t0 = Date.now();
+      const providerStartedAt = nowMs();
+
+      emitObs("outbox.worker.provider_attempt", baseObsFields(locked, {
+        attempt: attemptNo,
+        bucketWaitMs,
+        pairWaitMs,
+        contextMessageId: locked.contextMessageId || null,
+      }));
 
       try {
         const r =
@@ -359,6 +418,7 @@ export function startOutboxWorker({
                 contextMessageId: locked.contextMessageId || null,
               })
             : await metaSendMedia(locked);
+        const providerMs = durationMs(providerStartedAt);
 
         // log attempt (stress-test style)
         logger.write({
@@ -374,6 +434,16 @@ export function startOutboxWorker({
           ms: Date.now() - t0,
           error: r.ok && r.wamid ? null : r.json,
         });
+
+        emitObs("outbox.worker.provider_result", baseObsFields(locked, {
+          attempt: attemptNo,
+          providerMs,
+          httpStatus: r.status,
+          ok: !!(r.ok && r.wamid),
+          wamid: r.wamid,
+          errCode: r.errCode ?? null,
+          retryAfterMs: r.retryAfterMs ?? 0,
+        }));
 
         if (r.ok && r.wamid) {
   pairLimiter.markSent(locked.to);
@@ -416,7 +486,16 @@ export function startOutboxWorker({
           };
 
   try {
+    const dbPersistStartedAt = nowMs();
     await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
+    const dbPersistMs = durationMs(dbPersistStartedAt);
+    emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
+      attempt: attemptNo,
+      providerMs,
+      dbPersistMs,
+      wamid: r.wamid,
+      historyStatus: "stored",
+    }));
     console.log("[OUTBOX][ACCEPTED][DB] stored", {
       outboxId: String(locked._id),
       to: locked.to,
@@ -429,6 +508,13 @@ export function startOutboxWorker({
       wamid: r.wamid,
       error: String(e?.message || e)
     });
+    emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
+      attempt: attemptNo,
+      providerMs,
+      wamid: r.wamid,
+      historyStatus: "failed",
+      error: String(e?.message || e),
+    }));
   }
 
   logger.write({
@@ -439,6 +525,7 @@ export function startOutboxWorker({
     wamid: r.wamid,
   });
 
+  const markAcceptedStartedAt = nowMs();
   await OutboxMessage.updateOne(
     { _id: locked._id },
     {
@@ -454,6 +541,13 @@ export function startOutboxWorker({
               $inc: { attempts: 1 },
             }
   );
+
+  emitObs("outbox.worker.accepted_marked", baseObsFields(locked, {
+    attempt: attemptNo,
+    wamid: r.wamid,
+    markAcceptedMs: durationMs(markAcceptedStartedAt),
+    totalAttemptMs: Date.now() - t0,
+  }));
 
   continue;
 }
@@ -475,6 +569,15 @@ export function startOutboxWorker({
           reason: { httpStatus: r.status, code: r.errCode ?? null },
         });
 
+        emitObs("outbox.worker.retry_scheduled", baseObsFields(locked, {
+          attempt: attemptNo,
+          httpStatus: r.status,
+          errCode: r.errCode ?? null,
+          providerMs,
+          backoffMs,
+          nextAttemptAt: new Date(Date.now() + backoffMs).toISOString(),
+        }));
+
         await OutboxMessage.updateOne(
           { _id: locked._id },
           {
@@ -494,6 +597,7 @@ export function startOutboxWorker({
           errCode: null,
           retryAfterMs: 0,
         });
+        const providerMs = durationMs(providerStartedAt);
 
         logger.write({
           kind: "attempt",
@@ -518,6 +622,16 @@ export function startOutboxWorker({
           waitMs: backoffMs,
           reason: { httpStatus: 0, code: null },
         });
+
+        emitObs("outbox.worker.exception_retry_scheduled", baseObsFields(locked, {
+          attempt: attemptNo,
+          httpStatus: 0,
+          errCode: null,
+          providerMs,
+          backoffMs,
+          error: String(e?.message || e),
+          nextAttemptAt: new Date(Date.now() + backoffMs).toISOString(),
+        }));
 
         await OutboxMessage.updateOne(
           { _id: locked._id },
