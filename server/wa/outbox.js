@@ -311,6 +311,22 @@ function classifyStaleSending(item, staleMs) {
   };
 }
 
+function compareBatchPriority(a, b) {
+  const nextAttemptDiff =
+    new Date(a?.nextAttemptAt || 0).getTime() - new Date(b?.nextAttemptAt || 0).getTime();
+  if (nextAttemptDiff !== 0) return nextAttemptDiff;
+
+  const createdAtDiff =
+    new Date(a?.createdAt || 0).getTime() - new Date(b?.createdAt || 0).getTime();
+  if (createdAtDiff !== 0) return createdAtDiff;
+
+  const aSeq = Number.isInteger(a?.seq) ? a.seq : -1;
+  const bSeq = Number.isInteger(b?.seq) ? b.seq : -1;
+  if (aSeq !== bSeq) return aSeq - bSeq;
+
+  return String(a?._id || "").localeCompare(String(b?._id || ""));
+}
+
 // ---------- Worker ----------
 export function startOutboxWorker({
   token,
@@ -327,6 +343,8 @@ export function startOutboxWorker({
   const burst = Math.max(1, Number(process.env.OUTBOX_BURST ?? "16"));
   const minGap = Math.max(0, Number(process.env.OUTBOX_MIN_GAP_PER_RECIPIENT_MS ?? "6000"));
   const maxRetries = Math.max(0, Number(process.env.OUTBOX_MAX_RETRIES ?? "50"));
+  const processBatchLimit = Math.max(1, Number(process.env.OUTBOX_BATCH_LIMIT ?? "25"));
+  const candidateBatchLimit = Math.max(processBatchLimit, Number(process.env.OUTBOX_BATCH_CANDIDATE_LIMIT ?? "100"));
   const staleSendingMs = Math.max(60_000, Number(process.env.OUTBOX_STALE_SENDING_MS ?? "900000"));
   const staleSendingScanLimit = Math.max(1, Number(process.env.OUTBOX_STALE_SENDING_SCAN_LIMIT ?? "100"));
 
@@ -419,18 +437,22 @@ export function startOutboxWorker({
       nextAttemptAt: { $lte: now },
       attempts: { $lt: maxRetries },
     })
-      .sort({ nextAttemptAt: 1 })
-      .limit(25)
+      .sort({ nextAttemptAt: 1, createdAt: 1, seq: 1, _id: 1 })
+      .limit(candidateBatchLimit)
       .lean();
 
-    if (batch.length > 0) {
+    batch.sort(compareBatchPriority);
+    const workItems = batch.slice(0, processBatchLimit);
+
+    if (workItems.length > 0) {
       emitObs("outbox.worker.batch_loaded", {
-        batchSize: batch.length,
+        batchSize: workItems.length,
+        candidateBatchSize: batch.length,
         pendingStates: ["pending", "failed"],
       });
     }
 
-    for (const item of batch) {
+    for (const item of workItems) {
       // lock
       const lockStartedAt = nowMs();
       const locked = await OutboxMessage.findOneAndUpdate(
