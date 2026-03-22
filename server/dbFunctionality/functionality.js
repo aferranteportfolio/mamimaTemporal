@@ -2,6 +2,7 @@
 // ESM module with normalized, consistent helpers for your Product model
 
 import { Product } from './schemas/schema.js';
+import { durationMs, emitObs, nowMs } from '../utils/observability.js';
 
 /* ---------- Utilities ---------- */
 export function normalizeCustomerId(x) {
@@ -345,9 +346,16 @@ function buildOutboundMsg(src, ourNumber) {
 export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ourNumber) {
   const isInbound  = !!inboundMsg && !outboundMsg;
   const isOutbound = !!outboundMsg && !inboundMsg;
+  const mode = isInbound ? "inbound" : isOutbound ? "outbound" : "unknown";
 
   // Defensive: load fresh doc state
+  const freshReadStartedAt = nowMs();
   const fresh = await Product.findById(doc._id).lean();
+  emitObs("db.message_history.fresh_read", {
+    productId: String(doc?._id || ""),
+    mode,
+    freshReadMs: durationMs(freshReadStartedAt),
+  });
   const before = {
     lastMsgSeq: fresh?.lastMsgSeq ?? 0,
     lastReadSeq: fresh?.lastReadSeq ?? 0,
@@ -388,6 +396,7 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
     (String(outPayload.id || "").startsWith("wamid.") || outPayload.status === "sent");
 
   if (isAcceptUpdate) {
+    const placeholderUpdateStartedAt = nowMs();
     const upd = await Product.updateOne(
       { _id: doc._id, "state.0.messagesSentCollection.outboxId": outPayload.outboxId },
       {
@@ -411,6 +420,13 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
       },
       { arrayFilters: [{ "m.outboxId": outPayload.outboxId }] }
     );
+    emitObs("db.message_history.placeholder_update", {
+      productId: String(doc?._id || ""),
+      outboxId: outPayload.outboxId,
+      mode,
+      placeholderUpdateMs: durationMs(placeholderUpdateStartedAt),
+      modifiedCount: upd.modifiedCount ?? 0,
+    });
 
     // ✅ If we updated an existing queued item, STOP here.
     if (upd.modifiedCount) {
@@ -437,11 +453,27 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
     update.$push = { "state.0.messagesSentCollection": outPayload };
   }
 
+  const outboundPushStartedAt = nowMs();
   await Product.updateOne({ _id: doc._id }, update);
+  emitObs("db.message_history.outbound_update", {
+    productId: String(doc?._id || ""),
+    outboxId: outPayload?.outboxId ?? null,
+    mode,
+    outboundUpdateMs: durationMs(outboundPushStartedAt),
+    hasState0: before.hasState0,
+    path: before.hasState0 ? "push_existing_state" : "create_state",
+  });
 }
 
   // Execute atomic update
+  const messageUpdateStartedAt = nowMs();
   const result = await Product.updateOne({ _id: doc._id }, update);
+  emitObs("db.message_history.atomic_update", {
+    productId: String(doc?._id || ""),
+    mode,
+    messageUpdateMs: durationMs(messageUpdateStartedAt),
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  });
 
 
   // Rare fallback: if state[0] missing and $set.state didn’t apply (edge race)
@@ -503,29 +535,77 @@ async function initializeCostumerAndStoreMessageHistory(message, state) {
     return;
   }
 
+  const docLookupStartedAt = nowMs();
   let doc = await Product.findOne({ customer_id: customerId });
+  emitObs("db.message_history.lookup", {
+    customerId,
+    state,
+    hasDocument: !!doc,
+    lookupMs: durationMs(docLookupStartedAt),
+    outboxId: message?.outboxId ?? null,
+    messageId: message?.id ?? null,
+  });
    
   if (state === 1) {
     // INBOUND
     if (!doc) {
-
+      const createStartedAt = nowMs();
       await createNewObjectInDatabase(customerId, null, null, ourNumber,message);
+      const createMs = durationMs(createStartedAt);
+      const refetchStartedAt = nowMs();
       doc = await Product.findOne({ customer_id: customerId });
+      emitObs("db.message_history.created_missing_conversation", {
+        customerId,
+        state,
+        createMs,
+        refetchMs: durationMs(refetchStartedAt),
+        outboxId: message?.outboxId ?? null,
+        messageId: message?.id ?? null,
+      });
 
     }
  
+    const updateStartedAt = nowMs();
     await updateMessageReceivedById(doc, message, null, ourNumber);
+    emitObs("db.message_history.persisted", {
+      customerId,
+      state,
+      direction: "inbound",
+      persistMs: durationMs(updateStartedAt),
+      outboxId: message?.outboxId ?? null,
+      messageId: message?.id ?? null,
+    });
 
   } else {
     // OUTBOUND
     if (!doc) {
-
+      const createStartedAt = nowMs();
       await createNewObjectInDatabase(customerId, null, null, ourNumber);
+      const createMs = durationMs(createStartedAt);
+      const refetchStartedAt = nowMs();
       doc = await Product.findOne({ customer_id: customerId });
+      emitObs("db.message_history.created_missing_conversation", {
+        customerId,
+        state,
+        createMs,
+        refetchMs: durationMs(refetchStartedAt),
+        outboxId: message?.outboxId ?? null,
+        messageId: message?.id ?? null,
+      });
 
     }
     console.log(message)
+    const updateStartedAt = nowMs();
     await updateMessageReceivedById(doc, null, message, ourNumber);
+    emitObs("db.message_history.persisted", {
+      customerId,
+      state,
+      direction: "outbound",
+      persistMs: durationMs(updateStartedAt),
+      outboxId: message?.outboxId ?? null,
+      messageId: message?.id ?? null,
+      status: message?.status ?? null,
+    });
 
   }
 }
