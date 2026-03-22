@@ -278,6 +278,80 @@ function computePrevSeqRetryMs({ prevState, minGapMs }) {
   return configured;
 }
 
+function hasSequencedRunItem(item) {
+  return !!(item?.runId && Number.isInteger(item?.seq) && item.seq > 0);
+}
+
+async function inspectPrevSeqGate(item) {
+  if (!hasSequencedRunItem(item)) {
+    return {
+      applicable: false,
+      prevSeq: null,
+      prevSeqState: null,
+      firstInRun: false,
+    };
+  }
+
+  const prevSeq = item.seq - 1;
+  let prev = await OutboxMessage.findOne({
+    runId: item.runId,
+    seq: prevSeq,
+  })
+    .select({ state: 1 })
+    .lean();
+
+  let firstInRun = false;
+  if (!prev) {
+    const earlier = await OutboxMessage.findOne({
+      runId: item.runId,
+      seq: { $lt: item.seq },
+    })
+      .sort({ seq: -1 })
+      .select({ seq: 1, state: 1 })
+      .lean();
+
+    firstInRun = !earlier;
+    if (firstInRun) {
+      prev = { state: "accepted" };
+    }
+  }
+
+  return {
+    applicable: true,
+    prevSeq,
+    prevSeqState: prev?.state ?? null,
+    firstInRun,
+    allowed: !!prev && prev.state === "accepted",
+  };
+}
+
+async function deferBlockedPrevSeqItem(item, prevSeqInfo, minGapMs, nextState = item?.state ?? "pending") {
+  const blockedRetryMs = computePrevSeqRetryMs({
+    prevState: prevSeqInfo?.prevSeqState ?? null,
+    minGapMs,
+  });
+
+  await OutboxMessage.updateOne(
+    { _id: item._id, state: item.state },
+    {
+      $set: {
+        state: nextState,
+        nextAttemptAt: new Date(Date.now() + blockedRetryMs),
+      },
+    }
+  );
+
+  emitObs("outbox.worker.prev_seq_deferred", baseObsFields(item, {
+    prevSeq: prevSeqInfo?.prevSeq ?? null,
+    prevSeqState: prevSeqInfo?.prevSeqState ?? null,
+    firstInRun: !!prevSeqInfo?.firstInRun,
+    state: nextState,
+    rescheduledInMs: blockedRetryMs,
+  }));
+
+  return blockedRetryMs;
+}
+
 function classifyStaleSending(item, staleMs) {
   const createdAtMs = item?.createdAt ? new Date(item.createdAt).getTime() : null;
   const updatedAtMs = item?.updatedAt ? new Date(item.updatedAt).getTime() : null;
@@ -453,6 +527,30 @@ export function startOutboxWorker({
     }
 
     for (const item of workItems) {
+      if (hasSequencedRunItem(item)) {
+        const prevSeqStartedAt = nowMs();
+        const prevSeqInfo = await inspectPrevSeqGate(item);
+
+        emitObs("outbox.worker.prev_seq_checked", baseObsFields(item, {
+          prevSeq: prevSeqInfo.prevSeq,
+          prevSeqState: prevSeqInfo.prevSeqState,
+          firstInRun: prevSeqInfo.firstInRun,
+          prevSeqCheckMs: durationMs(prevSeqStartedAt),
+        }));
+
+        if (prevSeqInfo.firstInRun) {
+          emitObs("outbox.worker.prev_seq_first_item", baseObsFields(item, {
+            prevSeq: prevSeqInfo.prevSeq,
+            firstInRun: true,
+          }));
+        }
+
+        if (!prevSeqInfo.allowed) {
+          await deferBlockedPrevSeqItem(item, prevSeqInfo, minGap, item.state);
+          continue;
+        }
+      }
+
       // lock
       const lockStartedAt = nowMs();
       const locked = await OutboxMessage.findOneAndUpdate(
@@ -469,72 +567,6 @@ export function startOutboxWorker({
         queueAgeMs: locked?.createdAt ? Math.max(0, Date.now() - new Date(locked.createdAt).getTime()) : null,
         eligibleLagMs: locked?.nextAttemptAt ? Math.max(0, Date.now() - new Date(locked.nextAttemptAt).getTime()) : null,
       }));
-
-      // Strict in-run ordering: if this item belongs to a sequenced run,
-      // only send when the immediate predecessor is already accepted.
-      const hasSeq = Number.isInteger(locked.seq);
-      if (locked.runId && hasSeq && locked.seq > 0) {
-        const prevSeqStartedAt = nowMs();
-        const prevSeq = locked.seq - 1;
-        let prev = await OutboxMessage.findOne({
-          runId: locked.runId,
-          seq: prevSeq,
-        })
-          .select({ state: 1 })
-          .lean();
-
-        let firstInRun = false;
-        if (!prev) {
-          const earlier = await OutboxMessage.findOne({
-            runId: locked.runId,
-            seq: { $lt: locked.seq },
-          })
-            .sort({ seq: -1 })
-            .select({ seq: 1, state: 1 })
-            .lean();
-
-          firstInRun = !earlier;
-        }
-
-        emitObs("outbox.worker.prev_seq_checked", baseObsFields(locked, {
-          prevSeq,
-          prevSeqState: prev?.state ?? null,
-          firstInRun,
-          prevSeqCheckMs: durationMs(prevSeqStartedAt),
-        }));
-
-        if (firstInRun) {
-          emitObs("outbox.worker.prev_seq_first_item", baseObsFields(locked, {
-            prevSeq,
-            firstInRun: true,
-          }));
-          prev = { state: "accepted" };
-        }
-
-        if (!prev || prev.state !== "accepted") {
-          const blockedRetryMs = computePrevSeqRetryMs({
-            prevState: prev?.state ?? null,
-            minGapMs: minGap,
-          });
-
-          await OutboxMessage.updateOne(
-            { _id: locked._id, state: "sending" },
-            {
-              $set: {
-                state: "pending",
-                nextAttemptAt: new Date(Date.now() + blockedRetryMs),
-              },
-            }
-          );
-          emitObs("outbox.worker.prev_seq_blocked", baseObsFields(locked, {
-            prevSeq,
-            prevSeqState: prev?.state ?? null,
-            state: "pending",
-            rescheduledInMs: blockedRetryMs,
-          }));
-          continue;
-        }
-      }
 
       // throttles
       const bucketStartedAt = nowMs();
