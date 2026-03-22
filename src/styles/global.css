@@ -1080,9 +1080,38 @@ body { background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-syst
   margin-top: 4px;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
   opacity: 0.85;
 }
 /* Hora dentro del bubble */
+
+.bubble-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.bubble-status--sending,
+.bubble-status--queued {
+  background: rgba(255, 255, 255, 0.45);
+  color: #364152;
+}
+
+.bubble-status--sent {
+  background: rgba(255, 255, 255, 0.35);
+  color: #0f5132;
+}
+
+.bubble-status--error {
+  background: rgba(220, 38, 38, 0.14);
+  color: #991b1b;
+}
 
 .bubble-time {
   font-size: 11px;

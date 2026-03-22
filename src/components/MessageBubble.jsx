@@ -55,6 +55,20 @@ export default function MessageBubble({ message, onReply, quoted }) {
   const isLocation = message.type === "location";
   const isDocument = message.type === "document" || message.type === "file";
   const isCtwa = message.type === "ctwa_referral" || message.referral_type === "ads";
+  const statusRaw = String(message.status || "").toLowerCase();
+  const statusUi =
+    isMe && statusRaw
+      ? ({
+          sending: { label: "Sending…", tone: "sending" },
+          queued: { label: "Queued", tone: "queued" },
+          accepted: { label: "Accepted", tone: "sent" },
+          sent: { label: "Sent", tone: "sent" },
+          delivered: { label: "Delivered", tone: "sent" },
+          read: { label: "Read", tone: "sent" },
+          error: { label: "Failed", tone: "error" },
+          failed: { label: "Failed", tone: "error" },
+        }[statusRaw] || { label: statusRaw, tone: "queued" })
+      : null;
 
   const ctwaMediaHref =
     message.referral_metadata?.media_url ||
@@ -499,10 +513,15 @@ export default function MessageBubble({ message, onReply, quoted }) {
 
       {/* META (time) */}
       <div className="bubble-meta">
+        {statusUi && (
+          <span className={`bubble-status bubble-status--${statusUi.tone}`}>
+            {statusUi.label}
+          </span>
+        )}
         <span className="bubble-time">
           {new Date(message.timestamp).toLocaleTimeString([], {
-  hour: "2-digit",
-  minute: "2-digit",
+	  hour: "2-digit",
+	  minute: "2-digit",
   second: "2-digit",
 })}
         </span>
