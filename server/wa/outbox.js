@@ -1,9 +1,9 @@
 // server/wa/outbox.js
 import mongoose from "mongoose";
 import { createJsonlLogger, makeRunId } from "./outbox-logger.js";
-import { storeAcceptedText } from "./outbox-store.js";
 import { initializeCostumerAndStoreMessageHistory } from "../dbFunctionality/functionality.js";
 import fs from "node:fs";
+import { emitOutbound } from "./wa-events.js";
 import {
   uploadMediaToWhatsApp,
   sendImageByMediaId,
@@ -533,72 +533,85 @@ export function startOutboxWorker({
               : {}),
           };
 
-  try {
-    const dbPersistStartedAt = nowMs();
-    await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
-    const dbPersistMs = durationMs(dbPersistStartedAt);
-    emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
-      attempt: attemptNo,
-      providerMs,
-      dbPersistMs,
-      wamid: r.wamid,
-      historyStatus: "stored",
-    }));
-    console.log("[OUTBOX][ACCEPTED][DB] stored", {
-      outboxId: String(locked._id),
-      to: locked.to,
-      wamid: r.wamid
-    });
-  } catch (e) {
-    console.warn("[OUTBOX][ACCEPTED][DB] failed", {
-      outboxId: String(locked._id),
-      to: locked.to,
-      wamid: r.wamid,
-      error: String(e?.message || e)
-    });
-    emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
-      attempt: attemptNo,
-      providerMs,
-      wamid: r.wamid,
-      historyStatus: "failed",
-      error: String(e?.message || e),
-    }));
-  }
+          try {
+            const dbPersistStartedAt = nowMs();
+            await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
+            const dbPersistMs = durationMs(dbPersistStartedAt);
+            emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
+              attempt: attemptNo,
+              providerMs,
+              dbPersistMs,
+              wamid: r.wamid,
+              historyStatus: "stored",
+            }));
+            console.log("[OUTBOX][ACCEPTED][DB] stored", {
+              outboxId: String(locked._id),
+              to: locked.to,
+              wamid: r.wamid,
+            });
+          } catch (e) {
+            console.warn("[OUTBOX][ACCEPTED][DB] failed", {
+              outboxId: String(locked._id),
+              to: locked.to,
+              wamid: r.wamid,
+              error: String(e?.message || e),
+            });
+            emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
+              attempt: attemptNo,
+              providerMs,
+              wamid: r.wamid,
+              historyStatus: "failed",
+              error: String(e?.message || e),
+            }));
+          }
 
-  logger.write({
-    kind: "accepted",
-    outboxId: String(locked._id),
-    i: locked.seq ?? null,
-    to: locked.to,
-    wamid: r.wamid,
-  });
+          emitOutbound({
+            id: r.wamid,
+            outboxId: String(locked._id),
+            from: OUR_NUMBER,
+            to: locked.to,
+            text: locked.text,
+            type: locked.kind,
+            ts,
+            status: "sent",
+            contextMessageId: locked.contextMessageId || null,
+            replyToId: locked.contextMessageId || null,
+          });
 
-  const markAcceptedStartedAt = nowMs();
-  await OutboxMessage.updateOne(
-    { _id: locked._id },
-    {
-      $set: {
-        state: "accepted",
-        wamid: r.wamid,
-        lastHttpStatus: r.status,
-        lastErrorCode: null,
+          logger.write({
+            kind: "accepted",
+            outboxId: String(locked._id),
+            i: locked.seq ?? null,
+            to: locked.to,
+            wamid: r.wamid,
+          });
+
+          const markAcceptedStartedAt = nowMs();
+          await OutboxMessage.updateOne(
+            { _id: locked._id },
+            {
+              $set: {
+                state: "accepted",
+                wamid: r.wamid,
+                lastHttpStatus: r.status,
+                lastErrorCode: null,
                 lastError: null,
                 nextAttemptAt: null,
                 ...(r.mediaId ? { "media.mediaId": r.mediaId } : {}),
               },
               $inc: { attempts: 1 },
             }
-  );
+          );
 
-  emitObs("outbox.worker.accepted_marked", baseObsFields(locked, {
-    attempt: attemptNo,
-    wamid: r.wamid,
-    markAcceptedMs: durationMs(markAcceptedStartedAt),
-    totalAttemptMs: Date.now() - t0,
-  }));
+          emitObs("outbox.worker.accepted_marked", baseObsFields(locked, {
+            attempt: attemptNo,
+            wamid: r.wamid,
+            markAcceptedMs: durationMs(markAcceptedStartedAt),
+            totalAttemptMs: Date.now() - t0,
+          }));
 
-  continue;
-}
+          continue;
+        }
 
         // ❌ failed → schedule retry
         const backoffMs = computeBackoffMs({

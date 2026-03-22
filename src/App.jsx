@@ -391,6 +391,8 @@ useEffect(() => {
     const whenIso   = raw.timestamp || raw.ts || new Date().toISOString();
     const whenMs    = Number.isFinite(raw.ts) ? raw.ts : Date.parse(whenIso);
     const mediaUrl  = raw.imageUrl || raw.url || null;
+    const outboxId  = raw.outboxId || null;
+    const replyToId = raw.replyToId ?? raw.contextMessageId ?? null;
 
     let convId = raw.chatId || null;
     if (!convId && raw.to) {
@@ -408,14 +410,42 @@ useEffect(() => {
     setMessagesByChat(prev => {
       const arr = prev[convId] || [];
       const at = arr.findIndex(m => m.id === id);
+      const queuedIdx =
+        at >= 0
+          ? -1
+          : arr.findIndex((m) =>
+              (outboxId && m.outboxId === outboxId) ||
+              (raw.tempId && m.id === raw.tempId) ||
+              (outboxId && typeof m.id === "string" && m.id === `outbox:${outboxId}`)
+            );
 
       if (at >= 0) {
         const copy = [...arr];
         copy[at] = {
           ...copy[at],
+          outboxId: outboxId ?? copy[at].outboxId,
           status,
           text: text ?? copy[at].text,
           imageUrl: mediaUrl ?? copy[at].imageUrl,
+          replyToId: replyToId ?? copy[at].replyToId ?? null,
+          contextMessageId: raw.contextMessageId ?? copy[at].contextMessageId ?? null,
+          timestamp: new Date(whenMs).toISOString(),
+        };
+        return { ...prev, [convId]: copy };
+      }
+
+      if (queuedIdx >= 0) {
+        const copy = [...arr];
+        copy[queuedIdx] = {
+          ...copy[queuedIdx],
+          id: id || copy[queuedIdx].id,
+          waId: id || copy[queuedIdx].waId,
+          outboxId: outboxId ?? copy[queuedIdx].outboxId,
+          status,
+          text: text ?? copy[queuedIdx].text,
+          imageUrl: mediaUrl ?? copy[queuedIdx].imageUrl,
+          replyToId: replyToId ?? copy[queuedIdx].replyToId ?? null,
+          contextMessageId: raw.contextMessageId ?? copy[queuedIdx].contextMessageId ?? null,
           timestamp: new Date(whenMs).toISOString(),
         };
         return { ...prev, [convId]: copy };
@@ -423,8 +453,8 @@ useEffect(() => {
 
       const payload =
         type === 'image'
-          ? { id, chatId: convId, dir: 'out', from: 'me', type: 'image', imageUrl: mediaUrl, text, timestamp: new Date(whenMs).toISOString(), status }
-          : { id, chatId: convId, dir: 'out', from: 'me', type: 'text',  text,                     timestamp: new Date(whenMs).toISOString(), status };
+          ? { id, chatId: convId, dir: 'out', from: 'me', type: 'image', imageUrl: mediaUrl, text, timestamp: new Date(whenMs).toISOString(), status, outboxId, replyToId, contextMessageId: raw.contextMessageId ?? null }
+          : { id, chatId: convId, dir: 'out', from: 'me', type: 'text',  text,                     timestamp: new Date(whenMs).toISOString(), status, outboxId, replyToId, contextMessageId: raw.contextMessageId ?? null };
 
       return { ...prev, [convId]: [...arr, payload] };
     });
@@ -629,33 +659,64 @@ if (fromSearch) {
     const tempId = newid();
     const nowIso = new Date().toISOString();
 
-    const localMsg = { id: tempId, chatId, from: "me", dir: "out", type: "text", text, timestamp: nowIso, status: "sent", contextMessageId: opts?.contextMessageId || null, replyToId: opts?.contextMessageId || opts?.replyToUiId || null };
+    const localMsg = {
+      id: tempId,
+      chatId,
+      from: "me",
+      dir: "out",
+      type: "text",
+      text,
+      timestamp: nowIso,
+      status: "sending",
+      contextMessageId: opts?.contextMessageId || null,
+      replyToId: opts?.contextMessageId || opts?.replyToUiId || null,
+      outboxId: null,
+    };
     appendMessage(chatId, localMsg);
 
     try {
       const res = await apiSendText({ to, text, contextMessageId: opts?.contextMessageId || null });
-      const wamid = res?.id;
+      const queuedId = res?.tempId || res?.id || tempId;
+      const outboxId = res?.outboxId || null;
+      const queuedStatus = res?.status || (res?.queued ? "queued" : "sending");
 
-      if (wamid) {
-        setMessagesByChat(prev => {
-          const arr = prev[chatId] || [];
-          const i = arr.findIndex(m => m.id === tempId);
-          const j = arr.findIndex(m => m.id === wamid);
+      setMessagesByChat(prev => {
+        const arr = prev[chatId] || [];
+        const i = arr.findIndex(m => m.id === tempId);
+        const j =
+          queuedId && queuedId !== tempId
+            ? arr.findIndex(m => m.id === queuedId)
+            : -1;
 
-          if (i < 0 && j < 0) return prev;
+        if (i < 0 && j < 0) return prev;
 
-          let next = [...arr];
+        let next = [...arr];
+        const targetIdx = i >= 0 ? i : j;
+        next[targetIdx] = {
+          ...next[targetIdx],
+          id: queuedId,
+          outboxId,
+          status: queuedStatus,
+          contextMessageId: res?.contextMessageId ?? next[targetIdx].contextMessageId ?? null,
+          replyToId: res?.contextMessageId ?? next[targetIdx].replyToId ?? null,
+          timestamp: res?.timestamp || next[targetIdx].timestamp,
+        };
 
-          if (i >= 0) {
-            next[i] = { ...next[i], id: wamid, waId: wamid };
-          }
+        if (i >= 0 && j >= 0 && i !== j) {
+          next = next.filter((_, idx) => idx !== j);
+        }
 
-          next = next.filter((m, idx) => !(idx !== i && m.id === wamid));
-
-          return { ...prev, [chatId]: next };
-        });
-      }
+        return { ...prev, [chatId]: next };
+      });
     } catch (err) {
+      setMessagesByChat(prev => {
+        const arr = prev[chatId] || [];
+        const i = arr.findIndex(m => m.id === tempId);
+        if (i < 0) return prev;
+        const next = [...arr];
+        next[i] = { ...next[i], status: "error" };
+        return { ...prev, [chatId]: next };
+      });
 
       alert("Send text failed — check backend.");
     }
