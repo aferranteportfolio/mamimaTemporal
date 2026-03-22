@@ -85,6 +85,50 @@ function tsNum(iso) {
   return iso ? new Date(iso).getTime() : 0;
 }
 
+const OUTBOUND_RECONCILE_WINDOW_MS = 30_000;
+
+function normalizeOutboundText(value) {
+  return String(value ?? "").trim();
+}
+
+function outboundTimestampMs(value) {
+  const parsed = toMs(value);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function isOptimisticOutboundMessage(msg = {}) {
+  if (!msg || msg.dir !== "out") return false;
+  if (msg.status === "sending" || msg.status === "queued") return true;
+  if (!msg.outboxId) return true;
+  return typeof msg.id === "string" && msg.id.startsWith("outbox:");
+}
+
+function isEquivalentOptimisticOutbound(msg, candidate) {
+  if (!msg || !candidate) return false;
+  if (!isOptimisticOutboundMessage(candidate)) return false;
+  if ((candidate.type || "text") !== (msg.type || "text")) return false;
+
+  const msgText = normalizeOutboundText(msg.text ?? msg.caption);
+  const candidateText = normalizeOutboundText(candidate.text ?? candidate.caption);
+  if (msgText !== candidateText) return false;
+
+  const msgReply = msg.replyToId ?? msg.contextMessageId ?? null;
+  const candidateReply = candidate.replyToId ?? candidate.contextMessageId ?? null;
+  if (msgReply !== candidateReply) return false;
+
+  const msgMedia = msg.imageUrl || msg.url || null;
+  const candidateMedia = candidate.imageUrl || candidate.url || null;
+  if (msgMedia !== candidateMedia) return false;
+
+  const msgWhen = outboundTimestampMs(msg.timestamp || msg.ts);
+  const candidateWhen = outboundTimestampMs(candidate.timestamp || candidate.ts);
+  return Math.abs(msgWhen - candidateWhen) <= OUTBOUND_RECONCILE_WINDOW_MS;
+}
+
+function findEquivalentOptimisticOutboundIndex(arr = [], msg) {
+  return arr.findIndex((candidate) => isEquivalentOptimisticOutbound(msg, candidate));
+}
+
 function sortConversations(convs) {
   return [...(convs || [])].sort(
     (a, b) => Number(b.lastTimestamp || 0) - Number(a.lastTimestamp || 0)
@@ -418,6 +462,18 @@ useEffect(() => {
               (raw.tempId && m.id === raw.tempId) ||
               (outboxId && typeof m.id === "string" && m.id === `outbox:${outboxId}`)
             );
+      const equivalentIdx =
+        at >= 0 || queuedIdx >= 0
+          ? -1
+          : findEquivalentOptimisticOutboundIndex(arr, {
+              ...raw,
+              type,
+              text,
+              imageUrl: mediaUrl,
+              replyToId,
+              contextMessageId: raw.contextMessageId ?? null,
+              timestamp: new Date(whenMs).toISOString(),
+            });
 
       if (at >= 0) {
         const copy = [...arr];
@@ -434,21 +490,29 @@ useEffect(() => {
         return { ...prev, [convId]: copy };
       }
 
-      if (queuedIdx >= 0) {
+      const reconcileIdx = queuedIdx >= 0 ? queuedIdx : equivalentIdx;
+
+      if (reconcileIdx >= 0) {
         const copy = [...arr];
-        copy[queuedIdx] = {
-          ...copy[queuedIdx],
-          id: id || copy[queuedIdx].id,
-          waId: id || copy[queuedIdx].waId,
-          outboxId: outboxId ?? copy[queuedIdx].outboxId,
+        copy[reconcileIdx] = {
+          ...copy[reconcileIdx],
+          id: id || copy[reconcileIdx].id,
+          waId: id || copy[reconcileIdx].waId,
+          outboxId: outboxId ?? copy[reconcileIdx].outboxId,
           status,
-          text: text ?? copy[queuedIdx].text,
-          imageUrl: mediaUrl ?? copy[queuedIdx].imageUrl,
-          replyToId: replyToId ?? copy[queuedIdx].replyToId ?? null,
-          contextMessageId: raw.contextMessageId ?? copy[queuedIdx].contextMessageId ?? null,
+          text: text ?? copy[reconcileIdx].text,
+          imageUrl: mediaUrl ?? copy[reconcileIdx].imageUrl,
+          replyToId: replyToId ?? copy[reconcileIdx].replyToId ?? null,
+          contextMessageId: raw.contextMessageId ?? copy[reconcileIdx].contextMessageId ?? null,
           timestamp: new Date(whenMs).toISOString(),
         };
-        return { ...prev, [convId]: copy };
+        const deduped = copy.filter((msg, idx) => {
+          if (idx === reconcileIdx) return true;
+          if (id && msg.id === id) return false;
+          if (outboxId && msg.outboxId === outboxId) return false;
+          return !isEquivalentOptimisticOutbound(copy[reconcileIdx], msg);
+        });
+        return { ...prev, [convId]: deduped };
       }
 
       const payload =
@@ -691,20 +755,34 @@ if (fromSearch) {
           outboxId
             ? arr.findIndex((m) => m.outboxId === outboxId && m.id !== tempId)
             : -1;
+        const equivalentAcceptedIdx =
+          existingAcceptedIdx >= 0
+            ? existingAcceptedIdx
+            : arr.findIndex((m) =>
+                m.id !== tempId &&
+                m.dir === "out" &&
+                !isOptimisticOutboundMessage(m) &&
+                (m.type || "text") === localMsg.type &&
+                normalizeOutboundText(m.text) === normalizeOutboundText(localMsg.text) &&
+                (m.replyToId ?? m.contextMessageId ?? null) === (localMsg.replyToId ?? localMsg.contextMessageId ?? null) &&
+                Math.abs(outboundTimestampMs(m.timestamp) - outboundTimestampMs(localMsg.timestamp)) <= OUTBOUND_RECONCILE_WINDOW_MS
+              );
 
-        if (i < 0 && j < 0 && existingAcceptedIdx < 0) return prev;
+        if (i < 0 && j < 0 && existingAcceptedIdx < 0 && equivalentAcceptedIdx < 0) return prev;
 
         let next = [...arr];
         const targetIdx =
           existingAcceptedIdx >= 0
             ? existingAcceptedIdx
+            : equivalentAcceptedIdx >= 0
+              ? equivalentAcceptedIdx
             : (i >= 0 ? i : j);
 
         next[targetIdx] = {
           ...next[targetIdx],
-          id: existingAcceptedIdx >= 0 ? next[targetIdx].id : queuedId,
+          id: (existingAcceptedIdx >= 0 || equivalentAcceptedIdx >= 0) ? next[targetIdx].id : queuedId,
           outboxId,
-          status: existingAcceptedIdx >= 0 ? next[targetIdx].status : queuedStatus,
+          status: (existingAcceptedIdx >= 0 || equivalentAcceptedIdx >= 0) ? next[targetIdx].status : queuedStatus,
           contextMessageId: res?.contextMessageId ?? next[targetIdx].contextMessageId ?? null,
           replyToId: res?.contextMessageId ?? next[targetIdx].replyToId ?? null,
           timestamp: res?.timestamp || next[targetIdx].timestamp,
@@ -714,7 +792,7 @@ if (fromSearch) {
           next = next.filter((_, idx) => idx !== j);
         }
 
-        if (existingAcceptedIdx >= 0 && i >= 0 && i !== existingAcceptedIdx) {
+        if ((existingAcceptedIdx >= 0 || equivalentAcceptedIdx >= 0) && i >= 0 && i !== targetIdx) {
           next = next.filter((_, idx) => idx !== i);
         }
 
