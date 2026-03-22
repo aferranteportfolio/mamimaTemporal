@@ -19,6 +19,26 @@ if (!TOKEN || !PHONE_ID) {
 
 const API = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
 
+function getWhatsAppHttpTimeoutMs() {
+  return Math.max(5_000, Number(process.env.WHATSAPP_HTTP_TIMEOUT_MS ?? process.env.OUTBOX_PROVIDER_TIMEOUT_MS ?? "30_000"));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = getWhatsAppHttpTimeoutMs()) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`WhatsApp request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 
 function normalizeToE164(raw, defaultCountryCode = '51') {
   const digits = String(raw || '').replace(/\D/g, '');
@@ -40,7 +60,7 @@ export async function uploadMediaToWhatsApp(fileObj) {
 
   form.append("messaging_product", "whatsapp");
 
-  const resp = await fetch(
+  const resp = await fetchWithTimeout(
     // example:
     // https://graph.facebook.com/v20.0/<PHONE_NUMBER_ID>/media
     `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_ID}/media`,
@@ -66,7 +86,7 @@ export async function uploadMediaToWhatsApp(fileObj) {
 
 export async function sendImageByMediaId(to, mediaId, caption = '') {
   const url = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
-  const r = await fetch(url, {
+  const r = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TOKEN}`,
@@ -86,7 +106,7 @@ export async function sendImageByMediaId(to, mediaId, caption = '') {
 
 export async function sendVideoByMediaId(to, mediaId, caption = '') {
   const url = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
-  const r = await fetch(url, {
+  const r = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TOKEN}`,
@@ -108,7 +128,7 @@ export async function sendVideoByMediaId(to, mediaId, caption = '') {
 
 export async function sendDocumentByMediaId(to, mediaId, filename = '', caption = '') {
   const url = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
-  const r = await fetch(url, {
+  const r = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TOKEN}`,
@@ -136,7 +156,7 @@ export async function sendTextBack(to, text) {
     text: { body: String(text) }
   };
 
-  const r = await fetch(API, {
+  const r = await fetchWithTimeout(API, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${TOKEN}`,
@@ -174,7 +194,7 @@ export async function sendImageBack(to, { link, caption } = {}) {
     }
   };
 
-  const r = await fetch(API, {
+  const r = await fetchWithTimeout(API, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${TOKEN}`,

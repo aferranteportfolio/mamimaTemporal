@@ -125,6 +125,22 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = Math.max(5_000, Number(process.env.OUTBOX_PROVIDER_TIMEOUT_MS ?? "30_000"))) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`WhatsApp provider timeout after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function createTokenBucket({ rps = 5, burst = 10 }) {
   let tokens = burst;
   let last = Date.now();
@@ -179,7 +195,7 @@ async function metaSendText({ token, phoneId, to, text, contextMessageId = null 
     ...(contextMessageId ? { context: { message_id: contextMessageId } } : {}),
   };
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
