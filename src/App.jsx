@@ -687,16 +687,24 @@ if (fromSearch) {
           queuedId && queuedId !== tempId
             ? arr.findIndex(m => m.id === queuedId)
             : -1;
+        const existingAcceptedIdx =
+          outboxId
+            ? arr.findIndex((m) => m.outboxId === outboxId && m.id !== tempId)
+            : -1;
 
-        if (i < 0 && j < 0) return prev;
+        if (i < 0 && j < 0 && existingAcceptedIdx < 0) return prev;
 
         let next = [...arr];
-        const targetIdx = i >= 0 ? i : j;
+        const targetIdx =
+          existingAcceptedIdx >= 0
+            ? existingAcceptedIdx
+            : (i >= 0 ? i : j);
+
         next[targetIdx] = {
           ...next[targetIdx],
-          id: queuedId,
+          id: existingAcceptedIdx >= 0 ? next[targetIdx].id : queuedId,
           outboxId,
-          status: queuedStatus,
+          status: existingAcceptedIdx >= 0 ? next[targetIdx].status : queuedStatus,
           contextMessageId: res?.contextMessageId ?? next[targetIdx].contextMessageId ?? null,
           replyToId: res?.contextMessageId ?? next[targetIdx].replyToId ?? null,
           timestamp: res?.timestamp || next[targetIdx].timestamp,
@@ -704,6 +712,10 @@ if (fromSearch) {
 
         if (i >= 0 && j >= 0 && i !== j) {
           next = next.filter((_, idx) => idx !== j);
+        }
+
+        if (existingAcceptedIdx >= 0 && i >= 0 && i !== existingAcceptedIdx) {
+          next = next.filter((_, idx) => idx !== i);
         }
 
         return { ...prev, [chatId]: next };

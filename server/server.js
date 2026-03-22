@@ -1028,9 +1028,6 @@ console.log('✅ Media proxy mounted at /api/media/:id');
 // Send text (single, canonical endpoint)
 import { enqueueText } from "./wa/outbox.js";
 
-
-import { storeQueuedText } from "./wa/outbox-store.js";
-
 app.post("/api/send-text", async (req, res) => {
   const reqStartedAt = nowMs();
   try {
@@ -1066,17 +1063,16 @@ app.post("/api/send-text", async (req, res) => {
       source: "api.send-text",
     });
 
-    // 2) store queued placeholder in DB (store ctx there too)
-    const dbPlaceholderStartedAt = nowMs();
-    const tempId = await storeQueuedText({ to, text: cleanText, outboxId, contextMessageId: ctx });
-    const dbPlaceholderMs = durationMs(dbPlaceholderStartedAt);
-    emitObs("outbox.enqueue.placeholder_stored", {
+    // 2) return a client-side placeholder id, but do not persist a queued
+    // placeholder in Mongo history. The accepted send will be persisted later
+    // by the outbox worker, which avoids queued/sent duplicate bubbles.
+    const tempId = `outbox:${outboxId}`;
+    emitObs("outbox.enqueue.placeholder_virtualized", {
       outboxId,
       tempId,
       to,
       kind: "text",
       contextMessageId: ctx,
-      dbPlaceholderMs,
       totalEnqueuePathMs: durationMs(reqStartedAt),
       source: "api.send-text",
     });
