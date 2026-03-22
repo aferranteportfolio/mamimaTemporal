@@ -278,6 +278,39 @@ function computePrevSeqRetryMs({ prevState, minGapMs }) {
   return configured;
 }
 
+function classifyStaleSending(item, staleMs) {
+  const createdAtMs = item?.createdAt ? new Date(item.createdAt).getTime() : null;
+  const updatedAtMs = item?.updatedAt ? new Date(item.updatedAt).getTime() : null;
+  const ageMs = updatedAtMs ? Math.max(0, Date.now() - updatedAtMs) : null;
+  const lockWindowMs =
+    createdAtMs != null && updatedAtMs != null
+      ? Math.max(0, updatedAtMs - createdAtMs)
+      : null;
+
+  const hasProviderOutcome = !!(
+    item?.wamid ||
+    item?.lastHttpStatus != null ||
+    item?.lastErrorCode != null ||
+    item?.lastError != null
+  );
+
+  const looksLikeAbandonedLock = !!(
+    ageMs != null &&
+    ageMs >= staleMs &&
+    !hasProviderOutcome &&
+    (item?.attempts ?? 0) === 0 &&
+    lockWindowMs != null &&
+    lockWindowMs <= 60_000
+  );
+
+  return {
+    ageMs,
+    lockWindowMs,
+    hasProviderOutcome,
+    looksLikeAbandonedLock,
+  };
+}
+
 // ---------- Worker ----------
 export function startOutboxWorker({
   token,
@@ -294,6 +327,8 @@ export function startOutboxWorker({
   const burst = Math.max(1, Number(process.env.OUTBOX_BURST ?? "16"));
   const minGap = Math.max(0, Number(process.env.OUTBOX_MIN_GAP_PER_RECIPIENT_MS ?? "6000"));
   const maxRetries = Math.max(0, Number(process.env.OUTBOX_MAX_RETRIES ?? "50"));
+  const staleSendingMs = Math.max(60_000, Number(process.env.OUTBOX_STALE_SENDING_MS ?? "900000"));
+  const staleSendingScanLimit = Math.max(1, Number(process.env.OUTBOX_STALE_SENDING_SCAN_LIMIT ?? "100"));
 
   const bucket = createTokenBucket({ rps, burst });
   const pairLimiter = createPairLimiter({ minGapMs: minGap });
@@ -328,6 +363,56 @@ export function startOutboxWorker({
 
     try {
     const now = new Date();
+
+    const staleSending = await OutboxMessage.find({
+      state: "sending",
+      updatedAt: { $lte: new Date(Date.now() - staleSendingMs) },
+    })
+      .sort({ updatedAt: 1 })
+      .limit(staleSendingScanLimit)
+      .lean();
+
+    for (const item of staleSending) {
+      const staleInfo = classifyStaleSending(item, staleSendingMs);
+      if (staleInfo.looksLikeAbandonedLock) {
+        const recovered = await OutboxMessage.updateOne(
+          {
+            _id: item._id,
+            state: "sending",
+            updatedAt: item.updatedAt,
+          },
+          {
+            $set: {
+              state: "pending",
+              nextAttemptAt: new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (recovered.modifiedCount) {
+          emitObs("outbox.worker.stale_sending_recovered", baseObsFields(item, {
+            staleAgeMs: staleInfo.ageMs,
+            lockWindowMs: staleInfo.lockWindowMs,
+            nextAttemptAt: new Date().toISOString(),
+          }));
+          logger.write({
+            kind: "stale_sending_recovered",
+            outboxId: String(item._id),
+            to: item.to,
+            staleAgeMs: staleInfo.ageMs,
+            lockWindowMs: staleInfo.lockWindowMs,
+          });
+        }
+        continue;
+      }
+
+      emitObs("outbox.worker.stale_sending_manual_review", baseObsFields(item, {
+        staleAgeMs: staleInfo.ageMs,
+        lockWindowMs: staleInfo.lockWindowMs,
+        hasProviderOutcome: staleInfo.hasProviderOutcome,
+      }));
+    }
 
     const batch = await OutboxMessage.find({
       state: { $in: ["pending", "failed"] },
