@@ -1,6 +1,8 @@
 import { emitOutbound } from './wa-events.js';
 import fetch from "node-fetch";
 import FormData from "form-data";
+import { emitObs } from "../utils/observability.js";
+import { summarizeGraphError, compactErrorForLog } from "./graph-error.js";
 
 
 // server/wa/send.js
@@ -12,7 +14,7 @@ const API_MESSAGES = `${API_BASE}/messages`;
 const API_MEDIA    = `${API_BASE}/media`
 
 if (!TOKEN || !PHONE_ID) {
-  console.error("❌ Missing WHATSAPP_TOKEN or WHATSAPP_PHONE_ID in .env");
+  console.error("[WA][CONFIG] Missing WHATSAPP_TOKEN or WHATSAPP_PHONE_ID in environment.");
 }
 
 
@@ -53,13 +55,25 @@ export async function uploadMediaToWhatsApp(fileObj) {
     }
   );
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    const msg = `Media upload failed: ${resp.status} ${resp.statusText} ${text}`;
-    throw new Error(msg);
+  const rawText = await resp.text();
+  let json = null;
+  try {
+    json = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    json = null;
   }
 
-  const json = await resp.json();
+  if (!resp.ok) {
+    const graphError = summarizeGraphError(json, resp.status);
+    emitObs("wa.media_upload.failed", {
+      httpStatus: resp.status,
+      graphError,
+      filename,
+      mimeType,
+    });
+    throw new Error(`Media upload failed: ${resp.status} ${graphError.message || resp.statusText}`);
+  }
+
   // expected { id: "<media_id>" }
   return json.id;
 }
@@ -80,7 +94,11 @@ export async function sendImageByMediaId(to, mediaId, caption = '') {
     })
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(`sendImageByMediaId failed: ${r.status} ${JSON.stringify(j)}`);
+  if (!r.ok) {
+    const graphError = summarizeGraphError(j, r.status);
+    emitObs("wa.send_image.failed", { httpStatus: r.status, to, mediaId, graphError });
+    throw new Error(`sendImageByMediaId failed: ${r.status} ${graphError.message || JSON.stringify(compactErrorForLog(j))}`);
+  }
   return j.messages?.[0]?.id; // wamid
 }
 
@@ -100,7 +118,11 @@ export async function sendVideoByMediaId(to, mediaId, caption = '') {
     })
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(`sendVideoByMediaId failed: ${r.status} ${JSON.stringify(j)}`);
+  if (!r.ok) {
+    const graphError = summarizeGraphError(j, r.status);
+    emitObs("wa.send_video.failed", { httpStatus: r.status, to, mediaId, graphError });
+    throw new Error(`sendVideoByMediaId failed: ${r.status} ${graphError.message || JSON.stringify(compactErrorForLog(j))}`);
+  }
   return j.messages?.[0]?.id; // wamid
 }
 
@@ -122,7 +144,11 @@ export async function sendDocumentByMediaId(to, mediaId, filename = '', caption 
     })
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(`sendDocumentByMediaId failed: ${r.status} ${JSON.stringify(j)}`);
+  if (!r.ok) {
+    const graphError = summarizeGraphError(j, r.status);
+    emitObs("wa.send_document.failed", { httpStatus: r.status, to, mediaId, filename, graphError });
+    throw new Error(`sendDocumentByMediaId failed: ${r.status} ${graphError.message || JSON.stringify(compactErrorForLog(j))}`);
+  }
   return j.messages?.[0]?.id; // wamid
 }
 
@@ -157,7 +183,9 @@ export async function sendTextBack(to, text) {
 
 
   if (!r.ok) {
-    throw new Error(`WA sendText failed: ${r.status} ${r.statusText} ${JSON.stringify(json)}`);
+    const graphError = summarizeGraphError(json, r.status);
+    emitObs("wa.send_text.failed", { httpStatus: r.status, to: toNormalized, graphError });
+    throw new Error(`WA sendText failed: ${r.status} ${graphError.message || r.statusText}`);
   }
   return json?.messages?.[0]?.id || null;
 }
@@ -185,7 +213,9 @@ export async function sendImageBack(to, { link, caption } = {}) {
 
   const json = await r.json();
   if (!r.ok) {
-    const msg = `WA sendImage failed: ${r.status} ${r.statusText} ${JSON.stringify(json)}`;
+    const graphError = summarizeGraphError(json, r.status);
+    emitObs("wa.send_image_link.failed", { httpStatus: r.status, to, link, graphError });
+    const msg = `WA sendImage failed: ${r.status} ${graphError.message || r.statusText}`;
     throw new Error(msg);
   }
   return json?.messages?.[0]?.id || null;
