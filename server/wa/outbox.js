@@ -11,6 +11,7 @@ import {
   sendDocumentByMediaId,
 } from "./send.js";
 import { durationMs, emitObs, nowMs } from "../utils/observability.js";
+import { summarizeGraphError, compactErrorForLog } from "./graph-error.js";
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
 
@@ -460,6 +461,8 @@ export function startOutboxWorker({
           error: r.ok && r.wamid ? null : r.json,
         });
 
+        const graphError = summarizeGraphError(r.json, r.status);
+
         emitObs("outbox.worker.provider_result", baseObsFields(locked, {
           attempt: attemptNo,
           providerMs,
@@ -468,6 +471,7 @@ export function startOutboxWorker({
           wamid: r.wamid,
           errCode: r.errCode ?? null,
           retryAfterMs: r.retryAfterMs ?? 0,
+          graphError: r.ok && r.wamid ? null : graphError,
         }));
 
         if (r.ok && r.wamid) {
@@ -521,13 +525,8 @@ export function startOutboxWorker({
       wamid: r.wamid,
       historyStatus: "stored",
     }));
-    console.log("[OUTBOX][ACCEPTED][DB] stored", {
-      outboxId: String(locked._id),
-      to: locked.to,
-      wamid: r.wamid
-    });
   } catch (e) {
-    console.warn("[OUTBOX][ACCEPTED][DB] failed", {
+    console.warn("[OUTBOX][DB_WRITE_FAILED]", {
       outboxId: String(locked._id),
       to: locked.to,
       wamid: r.wamid,
@@ -594,14 +593,31 @@ export function startOutboxWorker({
           reason: { httpStatus: r.status, code: r.errCode ?? null },
         });
 
+        const nextAttemptAtIso = new Date(Date.now() + backoffMs).toISOString();
+
         emitObs("outbox.worker.retry_scheduled", baseObsFields(locked, {
           attempt: attemptNo,
           httpStatus: r.status,
           errCode: r.errCode ?? null,
           providerMs,
           backoffMs,
-          nextAttemptAt: new Date(Date.now() + backoffMs).toISOString(),
+          nextAttemptAt: nextAttemptAtIso,
+          graphError,
         }));
+
+        console.warn(graphError.isAuthError ? "[OUTBOX][AUTH_RETRY]" : "[OUTBOX][SEND_RETRY]", {
+          outboxId: String(locked._id),
+          to: locked.to,
+          kind: locked.kind,
+          attempt: attemptNo,
+          httpStatus: r.status,
+          errorCode: graphError.code,
+          errorSubcode: graphError.subcode,
+          errorType: graphError.type,
+          hint: graphError.hint,
+          nextAttemptAt: nextAttemptAtIso,
+          message: graphError.message,
+        });
 
         await OutboxMessage.updateOne(
           { _id: locked._id },
@@ -648,15 +664,27 @@ export function startOutboxWorker({
           reason: { httpStatus: 0, code: null },
         });
 
+        const nextAttemptAtIso = new Date(Date.now() + backoffMs).toISOString();
+
         emitObs("outbox.worker.exception_retry_scheduled", baseObsFields(locked, {
           attempt: attemptNo,
           httpStatus: 0,
           errCode: null,
           providerMs,
           backoffMs,
-          error: String(e?.message || e),
-          nextAttemptAt: new Date(Date.now() + backoffMs).toISOString(),
+          error: compactErrorForLog(e),
+          nextAttemptAt: nextAttemptAtIso,
         }));
+
+        console.warn("[OUTBOX][EXCEPTION_RETRY]", {
+          outboxId: String(locked._id),
+          to: locked.to,
+          kind: locked.kind,
+          attempt: attemptNo,
+          backoffMs,
+          nextAttemptAt: nextAttemptAtIso,
+          error: compactErrorForLog(e),
+        });
 
         await OutboxMessage.updateOne(
           { _id: locked._id },

@@ -2,11 +2,14 @@
 import { onOutbound, onInbound } from './wa-events.js';
 import { broadcast } from '../sse.js'; // <- you already export broadcast from server/sse.js
 
-const L = (tag, obj) => {
+const WA_LISTENER_DEBUG = String(process.env.WA_LISTENER_DEBUG ?? "0") === "1";
+
+function debugLog(tag, payload) {
+  if (!WA_LISTENER_DEBUG) return;
   const ts = new Date().toISOString();
-  const body = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  const body = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   console.log(`[${ts}] ${tag}\n${body}\n`);
-};
+}
 
 // If you can map phone -> chatId on the server, do it here.
 // Otherwise we still send 'to'/'fromPhone' and let the client map.
@@ -87,7 +90,7 @@ function toInboundUI(raw) {
 // OUTBOUND = business → customer
 onOutbound((payload) => {
   const ui = toOutboundUI(payload);
-  console.log("[SSE][OUTBOUND_UI]", ui);
+  debugLog("[SSE][OUTBOUND_UI]", ui);
   // 👇 this is what realtime.js listens to
   broadcast("outbound_ui", ui);
 });
@@ -95,10 +98,10 @@ onOutbound((payload) => {
 // INBOUND = customer → business
 onInbound((payload) => {
   const ui = toInboundUI(payload);
-  console.log("[SSE][INBOUND_UI]", ui);
+  debugLog("[SSE][INBOUND_UI]", ui);
   // 👇 this is what realtime.js listens to
   broadcast("inbound_ui", ui);
 });
 
 
-console.log('🧭 WA listeners (with SSE broadcast) loaded');
+console.log('[WA][LISTENERS] SSE listeners loaded');
