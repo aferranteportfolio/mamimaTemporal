@@ -41,5 +41,5 @@ export function emitObs(event, payload = {}) {
     event,
   };
 
-  console.log(JSON.stringify(body));
+  // console.log(JSON.stringify(body));
 }

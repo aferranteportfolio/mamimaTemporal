@@ -1436,7 +1436,7 @@ waEvents.on("inbound", async (payload = {}) => {
 
 waEvents.on('outbound', async (payload = {}) => {
   try {
-    console.log("is a message being sent right now?")
+    // console.log("is a message being sent right now?")
     payload.from = OUR_NUMBER;  // our number
     payload.to = normalizeCustomerId(String(payload.to)); // ensure "51" + digits
    
