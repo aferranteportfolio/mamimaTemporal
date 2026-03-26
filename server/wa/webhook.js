@@ -6,7 +6,12 @@ import { waEvents } from "./wa-events.js";
 
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || process.env.WHATSAPP_TOKEN;
-const L = (s,m,e)=>{const n=new Date().toISOString();console.log(`[${n}] [${s}] ${m}`, e ?? '');};
+const WEBHOOK_VERBOSE_LOGS = String(process.env.WEBHOOK_VERBOSE_LOGS || "").toLowerCase() === "1";
+const L = (s,m,e)=>{
+  if (!WEBHOOK_VERBOSE_LOGS) return;
+  const n=new Date().toISOString();
+  console.log(`[${n}] [${s}] ${m}`, e ?? '');
+};
 
 // --- helpers ---
 function getInboundText(m) {
@@ -84,7 +89,6 @@ export function registerWaWebhook(app) {
 
   // POST events
   app.post("/webhook", (req, res) => {
-    console.log('[WA] inbound payload:', JSON.stringify(req.body, null, 2));
     L('WEBHOOK', 'POST /webhook hit');
     try {
       const entries = req.body?.entry ?? [];
@@ -95,7 +99,6 @@ export function registerWaWebhook(app) {
         if (!changes.length) L('WEBHOOK', 'Entry has no changes');
 
         for (const change of changes) {
-          console.log("webhookjs 96 rawbody ", entries)
           const v = change?.value || {};
           const meta = v.metadata || {};
           const ourNumber = meta.display_phone_number || meta.phone_number_id;
