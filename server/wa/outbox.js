@@ -10,9 +10,14 @@ import {
   sendVideoByMediaId,
   sendDocumentByMediaId,
 } from "./send.js";
-import { durationMs, emitObs, nowMs } from "../utils/observability.js";
+import { durationMs, emitObs as emitObsBase, nowMs } from "../utils/observability.js";
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
+const OUTBOX_OBS_ENABLED = String(process.env.OUTBOX_OBS_LOG_ENABLED || "0") === "1";
+const emitObs = (event, payload = {}) => {
+  if (!OUTBOX_OBS_ENABLED) return;
+  emitObsBase(event, payload);
+};
 
 
 const OutboxSchema = new mongoose.Schema(
@@ -349,7 +354,7 @@ export function startOutboxWorker({
     return t.length > LOG_TEXT_MAX ? t.slice(0, LOG_TEXT_MAX) + "…" : t;
   }
 
-  console.log("[OUTBOX] worker started", { rps, burst, minGap, maxRetries, jsonl: JSONL_ENABLED, logDir: LOG_DIR });
+  // console.log("[OUTBOX] worker started", { rps, burst, minGap, maxRetries, jsonl: JSONL_ENABLED, logDir: LOG_DIR });
 
   logger.write({
     kind: "start",
@@ -629,18 +634,18 @@ export function startOutboxWorker({
               wamid: r.wamid,
               historyStatus: "stored",
             }));
-            console.log("[OUTBOX][ACCEPTED][DB] stored", {
-              outboxId: String(locked._id),
-              to: locked.to,
-              wamid: r.wamid,
-            });
+            // console.log("[OUTBOX][ACCEPTED][DB] stored", {
+            //   outboxId: String(locked._id),
+            //   to: locked.to,
+            //   wamid: r.wamid,
+            // });
           } catch (e) {
-            console.warn("[OUTBOX][ACCEPTED][DB] failed", {
-              outboxId: String(locked._id),
-              to: locked.to,
-              wamid: r.wamid,
-              error: String(e?.message || e),
-            });
+            // console.warn("[OUTBOX][ACCEPTED][DB] failed", {
+            //   outboxId: String(locked._id),
+            //   to: locked.to,
+            //   wamid: r.wamid,
+            //   error: String(e?.message || e),
+            // });
             emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
               attempt: attemptNo,
               providerMs,

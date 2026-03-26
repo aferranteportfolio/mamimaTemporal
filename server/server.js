@@ -1419,13 +1419,14 @@ waEvents.on("status", (st = {}) => {
 });
 
 waEvents.on("inbound", async (payload = {}) => {
-
-  
   payload.from = normalizeCustomerId(String(payload.from)); // customer
   payload.to   = normalizeCustomerId(String(payload.to));   // your biz number
+  const inboundText = String(payload.text || "").trim();
+  console.log(`[WA][RECEIVED] from=${payload.from} text="${inboundText}"`);
   await initializeCostumerAndStoreMessageHistory(payload, 1);
   try {
-    mesageSorter(payload);
+    const repliedAutomatically = await mesageSorter(payload);
+    console.log(`[WA][AUTO_REPLY] ${repliedAutomatically ? "YES" : "NO"} from=${payload.from}`);
   } catch (err) {
     console.error("mesageSorter error:", err, "for message:", payload);
   }
@@ -1435,7 +1436,7 @@ waEvents.on("inbound", async (payload = {}) => {
 
 waEvents.on('outbound', async (payload = {}) => {
   try {
-    console.log("is a message being sent right now?")
+    // console.log("is a message being sent right now?")
     payload.from = OUR_NUMBER;  // our number
     payload.to = normalizeCustomerId(String(payload.to)); // ensure "51" + digits
    

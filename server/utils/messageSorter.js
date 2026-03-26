@@ -275,7 +275,6 @@ function checkMessageAndMatch(normMsg, callback, triggerArray, isAdCheck = false
 // --- mesageSorter ------------------------------------------
 async function mesageSorter(rawMessage) {
   const normMsg = normalizeInboundMessage(rawMessage);
-  console.log("📦 normalized inbound message:", normMsg);
 
   // 1. Try CTWA/ad replies first if message is from an ad
   if (normMsg.isAd) {
@@ -292,12 +291,12 @@ async function mesageSorter(rawMessage) {
     });
 
     if (matchedAd) {
-      return;
+      return true;
     }
   }
 
   // 2. Try normal inbound replies
-  actionsAnyText.some(([replyFn, triggerArr, miscCfg]) => {
+  const matchedAnyText = actionsAnyText.some(([replyFn, triggerArr, miscCfg]) => {
     return checkMessageAndMatch(
       normMsg,
       (m /*, cfg */) => {
@@ -308,6 +307,8 @@ async function mesageSorter(rawMessage) {
       miscCfg
     );
   });
+
+  return matchedAnyText;
 }
 
 

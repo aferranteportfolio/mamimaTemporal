@@ -1,6 +1,8 @@
 import { performance } from "node:perf_hooks";
 
-const OBS_ENABLED = String(process.env.OBS_LOG_ENABLED ?? "1") !== "0";
+// Keep observability logs opt-in so regular console output stays clean.
+// Set OBS_LOG_ENABLED=1 when you need low-level JSON event traces.
+const OBS_ENABLED = String(process.env.OBS_LOG_ENABLED ?? "0") === "1";
 
 function safeJson(value) {
   if (value == null) return value ?? null;
@@ -39,5 +41,5 @@ export function emitObs(event, payload = {}) {
     event,
   };
 
-  console.log(JSON.stringify(body));
+  // console.log(JSON.stringify(body));
 }
