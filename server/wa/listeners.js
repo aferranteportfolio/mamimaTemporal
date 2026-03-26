@@ -1,4 +1,5 @@
 // server/wa/listeners.js
+import '../utils/consoleLogFilter.js';
 import { onOutbound, onInbound } from './wa-events.js';
 import { broadcast } from '../sse.js'; // <- you already export broadcast from server/sse.js
 

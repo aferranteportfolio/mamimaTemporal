@@ -1,4 +1,5 @@
 // server/jobs/cron-jobs.mjs
+import '../utils/consoleLogFilter.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import mongoose from 'mongoose';

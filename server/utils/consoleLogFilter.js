@@ -6,17 +6,29 @@ const ALLOWED_PREFIXES = [
 ];
 
 if (!globalThis.__consoleLogFilterInstalled) {
-  const rawConsoleLog = console.log.bind(console);
-
-  console.log = (...args) => {
+  const shouldAllow = (args) => {
     if (!args.length) return;
 
     const firstArg = typeof args[0] === "string" ? args[0].trimStart() : "";
-    const isAllowed = ALLOWED_PREFIXES.some((prefix) => firstArg.startsWith(prefix));
+    return ALLOWED_PREFIXES.some((prefix) => firstArg.startsWith(prefix));
+  };
 
-    if (isAllowed) {
-      rawConsoleLog(...args);
-    }
+  const rawConsoleLog = console.log.bind(console);
+  const rawConsoleInfo = console.info.bind(console);
+  const rawConsoleWarn = console.warn.bind(console);
+  const rawConsoleDebug = console.debug.bind(console);
+
+  console.log = (...args) => {
+    if (shouldAllow(args)) rawConsoleLog(...args);
+  };
+  console.info = (...args) => {
+    if (shouldAllow(args)) rawConsoleInfo(...args);
+  };
+  console.warn = (...args) => {
+    if (shouldAllow(args)) rawConsoleWarn(...args);
+  };
+  console.debug = (...args) => {
+    if (shouldAllow(args)) rawConsoleDebug(...args);
   };
 
   globalThis.__consoleLogFilterInstalled = true;
