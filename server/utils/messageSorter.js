@@ -275,14 +275,6 @@ function checkMessageAndMatch(normMsg, callback, triggerArray, isAdCheck = false
 // --- mesageSorter ------------------------------------------
 async function mesageSorter(rawMessage) {
   const normMsg = normalizeInboundMessage(rawMessage);
-  const messageReceived =
-    normMsg.bodyText ||
-    normMsg.adTextBody ||
-    normMsg.adTextHeadline ||
-    "";
-
-  let wasAutoReplied = false;
-  let triggeredAutoReplyName = "none";
 
   // 1. Try CTWA/ad replies first if message is from an ad
   let matchedAd = false;
@@ -291,8 +283,7 @@ async function mesageSorter(rawMessage) {
       return checkMessageAndMatch(
         normMsg,
         (m /*, cfg */) => {
-          wasAutoReplied = true;
-          triggeredAutoReplyName = title || "untitled";
+          void title;
           replyFn(m.from);
         },
         triggerArr,
@@ -308,8 +299,7 @@ async function mesageSorter(rawMessage) {
       return checkMessageAndMatch(
         normMsg,
         (m /*, cfg */) => {
-          wasAutoReplied = true;
-          triggeredAutoReplyName = title || "untitled";
+          void title;
           replyFn(m.from);
         },
         triggerArr,
@@ -318,11 +308,6 @@ async function mesageSorter(rawMessage) {
       );
     });
   }
-
-  console.log(`message received : ${messageReceived}`);
-  console.log(`message from : ${normMsg.from || ""}`);
-  console.log(`was auto replied? : ${wasAutoReplied}`);
-  console.log(`name of the auto reply triggered : ${triggeredAutoReplyName}`);
 }
 
 
