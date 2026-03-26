@@ -629,18 +629,7 @@ export function startOutboxWorker({
               wamid: r.wamid,
               historyStatus: "stored",
             }));
-            console.log("[OUTBOX][ACCEPTED][DB] stored", {
-              outboxId: String(locked._id),
-              to: locked.to,
-              wamid: r.wamid,
-            });
           } catch (e) {
-            console.warn("[OUTBOX][ACCEPTED][DB] failed", {
-              outboxId: String(locked._id),
-              to: locked.to,
-              wamid: r.wamid,
-              error: String(e?.message || e),
-            });
             emitObs("outbox.worker.db_persisted", baseObsFields(locked, {
               attempt: attemptNo,
               providerMs,

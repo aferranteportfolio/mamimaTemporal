@@ -87,7 +87,6 @@ function toInboundUI(raw) {
 // OUTBOUND = business → customer
 onOutbound((payload) => {
   const ui = toOutboundUI(payload);
-  console.log("[SSE][OUTBOUND_UI]", ui);
   // 👇 this is what realtime.js listens to
   broadcast("outbound_ui", ui);
 });
@@ -95,10 +94,6 @@ onOutbound((payload) => {
 // INBOUND = customer → business
 onInbound((payload) => {
   const ui = toInboundUI(payload);
-  console.log("[SSE][INBOUND_UI]", ui);
   // 👇 this is what realtime.js listens to
   broadcast("inbound_ui", ui);
 });
-
-
-console.log('🧭 WA listeners (with SSE broadcast) loaded');
