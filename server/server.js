@@ -1086,8 +1086,6 @@ app.post("/api/send-text", async (req, res) => {
       queued: true,
       outboxId,
       id: tempId,
-      tempId,
-      status: "queued",
       contextMessageId: ctx, // useful for debugging
       timestamp: new Date().toISOString(),
     });
