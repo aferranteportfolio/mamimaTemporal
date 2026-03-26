@@ -275,14 +275,23 @@ function checkMessageAndMatch(normMsg, callback, triggerArray, isAdCheck = false
 // --- mesageSorter ------------------------------------------
 async function mesageSorter(rawMessage) {
   const normMsg = normalizeInboundMessage(rawMessage);
-  console.log("📦 normalized inbound message:", normMsg);
+  const messageReceived =
+    normMsg.bodyText ||
+    normMsg.adTextBody ||
+    normMsg.adTextHeadline ||
+    "";
+  let wasAutoReplied = false;
+  let triggeredAutoReplyName = "none";
 
   // 1. Try CTWA/ad replies first if message is from an ad
+  let matchedAd = false;
   if (normMsg.isAd) {
-    const matchedAd = actionsCTWA.some(([replyFn, triggerArr, miscCfg]) => {
+    matchedAd = actionsCTWA.some(([replyFn, triggerArr, miscCfg, title]) => {
       return checkMessageAndMatch(
         normMsg,
         (m /*, cfg */) => {
+          wasAutoReplied = true;
+          triggeredAutoReplyName = title || "untitled";
           replyFn(m.from);
         },
         triggerArr,
@@ -290,24 +299,30 @@ async function mesageSorter(rawMessage) {
         miscCfg
       );
     });
-
-    if (matchedAd) {
-      return;
-    }
   }
 
   // 2. Try normal inbound replies
-  actionsAnyText.some(([replyFn, triggerArr, miscCfg]) => {
-    return checkMessageAndMatch(
-      normMsg,
-      (m /*, cfg */) => {
-        replyFn(m.from);
-      },
-      triggerArr,
-      false,
-      miscCfg
-    );
-  });
+  if (!matchedAd) {
+    actionsAnyText.some(([replyFn, triggerArr, miscCfg, title]) => {
+      return checkMessageAndMatch(
+        normMsg,
+        (m /*, cfg */) => {
+          wasAutoReplied = true;
+          triggeredAutoReplyName = title || "untitled";
+          replyFn(m.from);
+        },
+        triggerArr,
+        false,
+        miscCfg
+      );
+    });
+  }
+
+  console.log(`message received : ${messageReceived}`);
+  console.log(`message from : ${normMsg.from || ""}`);
+  console.log(`was auto replied? : ${wasAutoReplied}`);
+  console.log(`name of the auto reply triggered : ${triggeredAutoReplyName}`);
+  console.log("----------------------------------------");
 }
 
 
@@ -326,8 +341,6 @@ function nowIso() {
  * 3. Send WhatsApp messages + media
  */
 export async function actuallySendSavedReplyObject(toPhone, savedReply, folderName, miscCfg) {
-  console.log(`[autoReplyEngine] 📨 REQUEST TO SEND "${savedReply.title}" ->`, toPhone);
-
   // 1) DB logging
   try {
     if (miscCfg?.d) {
@@ -367,7 +380,6 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
     // - If the part has no files, send text bubble.
     if (files.length === 0 && text) {
       const runAt = new Date(baseMs + k * gapMs);
-      console.log(`[autoReplyEngine]   text scheduled @ ${runAt.toISOString()} => ${JSON.stringify(text)}`);
 
       await sendTextMessage(toPhone, text, { runId, seq: k, nextAttemptAt: runAt });
       k++;
@@ -380,8 +392,6 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
 
         const absoluteFilePath = path.join(SAVED_REPLIES_ROOT, folderName, f.storedName);
         const runAt = new Date(baseMs + k * gapMs);
-
-        console.log(`[autoReplyEngine]   media scheduled @ ${runAt.toISOString()} => ${absoluteFilePath}`);
 
         // ✅ This only works if sendMediaMessage also ENQUEUES and supports nextAttemptAt.
         await sendMediaMessage(toPhone, {

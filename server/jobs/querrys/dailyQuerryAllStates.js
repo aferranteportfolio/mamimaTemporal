@@ -9,7 +9,6 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/whatsAppDB
 async function connectDB() {
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(MONGO_URI);
-    console.log('✅ Connected to MongoDB (dailyQuerryAllStates)');
   }
 }
 
@@ -219,7 +218,6 @@ export async function dailyQuerryAllStates() {
 
   // If no candidates, bail out early
   if (!candidates.length) {
-    console.log('[dailyQuerryAllStates] candidates = 0, nothing to do.');
     return [];
   }
 
@@ -254,10 +252,6 @@ export async function dailyQuerryAllStates() {
     });
   }
 
-  console.log('[dailyQuerryAllStates] candidates =', candidates.length);
-  console.log('[dailyQuerryAllStates] existing customers =', existingCustomerSet.size);
-  console.log('[dailyQuerryAllStates] results to return =', results.length);
-
   return results;
 }
 
@@ -267,17 +261,8 @@ export async function dailyQuerryAllStates() {
 if (process.argv[1] && process.argv[1].endsWith('dailyQuerryAllStates.js')) {
   (async () => {
     try {
-      console.log('[CLI] Running dailyQuerryAllStates once...');
       const results = await dailyQuerryAllStates();
-
-      console.log(
-        '[CLI] Finished. Results length =',
-        Array.isArray(results) ? results.length : 0
-      );
-
-      if (Array.isArray(results) && results.length > 0) {
-        console.log('[CLI] First result sample:', results[0]);
-      }
+      void results;
 
       process.exit(0);
     } catch (err) {

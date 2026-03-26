@@ -1,5 +1,6 @@
 // server/server.js
 import 'dotenv/config';
+import './utils/consoleLogFilter.js';
 
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -1433,7 +1434,6 @@ waEvents.on("inbound", async (payload = {}) => {
 
 waEvents.on('outbound', async (payload = {}) => {
   try {
-    console.log("is a message being sent right now?")
     payload.from = OUR_NUMBER;  // our number
     payload.to = normalizeCustomerId(String(payload.to)); // ensure "51" + digits
    
