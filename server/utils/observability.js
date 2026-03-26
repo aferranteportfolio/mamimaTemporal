@@ -26,6 +26,9 @@ export function durationMs(startMs) {
 }
 
 export function emitObs(event, payload = {}) {
+  // Hard-off per request: disable observability console output.
+  // Keep code below easy to restore later.
+  return;
   if (!OBS_ENABLED) return;
 
   const sanitizedPayload = {};
