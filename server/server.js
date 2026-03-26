@@ -1,5 +1,6 @@
 // server/server.js
 import 'dotenv/config';
+import './utils/consoleLogFilter.js';
 
 import mongoose from 'mongoose';
 import cors from 'cors';
