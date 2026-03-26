@@ -10,9 +10,14 @@ import {
   sendVideoByMediaId,
   sendDocumentByMediaId,
 } from "./send.js";
-import { durationMs, emitObs, nowMs } from "../utils/observability.js";
+import { durationMs, emitObs as emitObsBase, nowMs } from "../utils/observability.js";
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || "").trim();
+const OUTBOX_OBS_ENABLED = String(process.env.OUTBOX_OBS_LOG_ENABLED || "0") === "1";
+const emitObs = (event, payload = {}) => {
+  if (!OUTBOX_OBS_ENABLED) return;
+  emitObsBase(event, payload);
+};
 
 
 const OutboxSchema = new mongoose.Schema(
