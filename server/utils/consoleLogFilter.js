@@ -3,6 +3,7 @@ const ALLOWED_PREFIXES = [
   "message from :",
   "was auto replied? :",
   "name of the auto reply triggered :",
+  "----------------------------------------",
 ];
 
 if (!globalThis.__consoleLogFilterInstalled) {

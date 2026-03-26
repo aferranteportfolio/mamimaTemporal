@@ -322,6 +322,7 @@ async function mesageSorter(rawMessage) {
   console.log(`message from : ${normMsg.from || ""}`);
   console.log(`was auto replied? : ${wasAutoReplied}`);
   console.log(`name of the auto reply triggered : ${triggeredAutoReplyName}`);
+  console.log("----------------------------------------");
 }
 
 
