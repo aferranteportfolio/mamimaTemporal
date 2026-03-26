@@ -279,23 +279,6 @@ function buildInboundMsg(src) {
     sentBy: undefined,
   };
 
-  // Debug everything except pure text
-  if (type !== "text") {
-    console.log("[DB] buildInboundMsg →", {
-      type,
-      mediaId: payload.mediaId,
-      mime: media?.mimeType,
-      kind: media?.kind,
-      hasUrl: !!payload.url,
-      locationUrl: payload.locationUrl,
-      hasLocation: !!location,
-      loc: location
-        ? { lat: location.latitude, lng: location.longitude, name: location.name }
-        : null,
-      ts: payload.timestamp.toISOString(),
-    });
-  }
-
   return payload;
 }
 
@@ -618,7 +601,6 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
 
   const product = await Product.findOne({ customer_id: customerId });
   if (!product) {
-    console.log(`❌ No product found for customer ID: ${customerId}`);
     return;
   }
 
@@ -636,8 +618,6 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
   const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
 
   if (!existingProduct) {
-    console.log(`🆕 Adding new product: ${product_info_requested}`);
-
     product.costumer_profile = product.costumer_profile || [];
     product.costumer_profile.push({
       productOfInterest: product_info_requested,
@@ -659,11 +639,8 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
     }
 
     await product.save();
-    console.log(`✅ New product added and state updated for ${customerId}`);
     return true;
   } else {
-    console.log(`♻️ Updating existing product: ${product_info_requested}`);
-
     existingProduct.timestamp = now();
     existingProduct.product_value = product_value;
     existingProduct.shippingInfo = shippingInfo;
@@ -676,7 +653,6 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
     }
 
     await product.save();
-    console.log(`✅ Existing product updated for ${customerId}`);
     return false;
   }
 }

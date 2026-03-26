@@ -18,7 +18,6 @@ const ENABLE_CATCHUP = String(process.env.CRON_CATCHUP || '1') === '1'; // enabl
 async function connectDB() {
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(MONGO_URI /* , { useNewUrlParser: true, useUnifiedTopology: true } */);
-    console.log('✅ Connected to MongoDB');
   }
 }
 
@@ -45,24 +44,17 @@ const running = new Map(); // name -> boolean
 
 async function runQuery(name, queryFn) {
   if (running.get(name)) {
-    console.warn(`[CRON][${name}] skipped: previous run still in progress`);
     return;
   }
   running.set(name, true);
 
   const t0 = Date.now();
-  console.log(`🕐 [CRON][${name}] start`);
   try {
     await connectDB();
     const results = await queryFn();
 
     if (Array.isArray(results) && results.length > 0) {
-      const { insertedCount, duplicateCount } = await insertMessageTasks(results);
-      console.log(
-        `✅ [CRON][${name}] got ${results.length} results | inserted=${insertedCount} | duplicates=${duplicateCount}`
-      );
-    } else {
-      console.log(`⚠️  [CRON][${name}] no results`);
+      await insertMessageTasks(results);
     }
 
     // persist lastRunAt for catch-up logic
@@ -70,7 +62,6 @@ async function runQuery(name, queryFn) {
     state[name] = { lastRunAt: new Date().toISOString(), lastRunYMD: ymdInTZ() };
     await saveState(state);
 
-    console.log(`🏁 [CRON][${name}] done in ${Date.now() - t0} ms`);
   } catch (err) {
     console.error(`❌ [CRON][${name}] failed after ${Date.now() - t0} ms ->`, err?.message || err);
   } finally {
@@ -105,13 +96,10 @@ function safeSchedule(cronExpr, name, fn, { timezone = TZ, catchUpAfterMinute = 
         const [HH, MM] = nowStr.split(':').map((n) => parseInt(n, 10));
 
         if (!already && (HH > 14 || (HH === 14 && MM >= catchUpAfterMinute))) {
-          console.warn(
-            `[CRON][${name}] catch-up: no run recorded for today (${today}); triggering once now`
-          );
           await runQuery(name, fn);
         }
       } catch (e) {
-        console.warn(`[CRON][${name}] catch-up check failed:`, e?.message || e);
+        // ignore catch-up check errors
       }
     })();
   }
@@ -137,5 +125,3 @@ process.on('unhandledRejection', (r) => {
 process.on('uncaughtException', (e) => {
   console.error('[UNCAUGHT EXCEPTION]', e);
 });
-
-console.log('🟢 Cron scheduler is running... (TZ:', TZ, ', catch-up:', ENABLE_CATCHUP, ')');
