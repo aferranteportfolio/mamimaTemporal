@@ -1,7 +1,4 @@
 import { emitOutbound } from './wa-events.js';
-import fetch from "node-fetch";
-import FormData from "form-data";
-
 
 // server/wa/send.js
 const TOKEN = process.env.WHATSAPP_TOKEN;
@@ -33,11 +30,8 @@ export async function uploadMediaToWhatsApp(fileObj) {
   const { buffer, mimeType, filename } = fileObj;
 
   const form = new FormData();
-  form.append("file", buffer, {
-    contentType: mimeType,
-    filename: filename
-  });
-
+  const blob = new Blob([buffer], { type: mimeType || "application/octet-stream" });
+  form.append("file", blob, filename || "upload.bin");
   form.append("messaging_product", "whatsapp");
 
   const resp = await fetch(
