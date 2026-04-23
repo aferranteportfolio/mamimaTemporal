@@ -56,6 +56,7 @@ import { durationMs, emitObs, nowMs } from "./utils/observability.js";
 import http from 'node:http';
 // server/server.js
 import express from 'express';
+import { DEFAULT_WHATSAPP_TOKEN } from "./wa/defaults.js";
 
 
 const OUR_NUMBER = String(process.env.OUR_NUMBER || process.env.WHATSAPP_SENDER || '').trim();
@@ -616,7 +617,8 @@ function getInboundText(payload) {
 const SERVER_ID = `srv:${process.pid}:${Math.random().toString(36).slice(2,6)}`;
 console.log('🟢 BOOT', SERVER_ID);
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WA_TOKEN = process.env.WHATSAPP_TOKEN || DEFAULT_WHATSAPP_TOKEN;
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || WA_TOKEN;
 
 const WA_DEBUG = String(process.env.WA_DEBUG ?? "0") === "1";
 
@@ -1021,7 +1023,7 @@ if (audioMsgs.length) {
 import { createMediaProxyRouter } from './wa/media-proxy.js';
 
 app.use('/api/media', createMediaProxyRouter({
-  token: process.env.WHATSAPP_TOKEN
+  token: WA_TOKEN
 }));
 console.log('✅ Media proxy mounted at /api/media/:id');
 
@@ -1480,7 +1482,7 @@ installConnectionEventLogs();
 
 
 const w = startOutboxWorker({
-  token: process.env.WHATSAPP_TOKEN,
+  token: WA_TOKEN,
   phoneId: process.env.WHATSAPP_PHONE_ID,
   incApiAccepted,
   storeSentMessage,
