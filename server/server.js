@@ -1345,6 +1345,27 @@ export async function sendTextAdapter(to, text, sellerId) {
   return await sendTextViaHttp(to, String(text || ""), sellerId);
 }
 
+export async function sendMediaAdapter(to, fileInfo = {}, sellerId) {
+  const url = String(fileInfo.url || "");
+  if (!url) throw new Error("Missing media URL");
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Media fetch failed: ${resp.status} ${url}`);
+
+  const mime = String(fileInfo.mime || resp.headers.get("content-type") || "application/octet-stream").split(";")[0];
+  const filename = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "programmed-media");
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  const mediaId = await uploadMediaToWhatsApp({ buffer, mimeType: mime, filename });
+
+  if (mime.startsWith("video/")) {
+    return await sendVideoByMediaId(to, mediaId, fileInfo.caption || "");
+  }
+  if (mime.startsWith("image/")) {
+    return await sendImageByMediaId(to, mediaId, fileInfo.caption || "");
+  }
+  return await sendDocumentByMediaId(to, mediaId, filename, fileInfo.caption || "");
+}
+
 // Avoid overlapping runs
 let pmRunning = false;
 async function pmTick({ force = false } = {}) {
@@ -1354,6 +1375,7 @@ async function pmTick({ force = false } = {}) {
     await runProgrammedDispatcher({
       force,
       sendText: sendTextAdapter,
+      sendMedia: sendMediaAdapter,
       // ⚠️ DO NOT pass onMessageSent — /api/send-text already stores the message
       verbose: true,
     });

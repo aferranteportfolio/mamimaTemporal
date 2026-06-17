@@ -1,6 +1,6 @@
 // server/pm/scheduler.js
 import { runProgrammedDispatcher } from "../programmed-dispatcher.js";
-import { sendTextAdapter } from "../../server.js";
+import { sendTextAdapter, sendMediaAdapter } from "../../server.js";
 
 export const pmStatus = {
   startedAt: null,
@@ -32,6 +32,7 @@ async function tick({ force = false, onlyTaskId = null } = {}) {
       force,
       onlyTaskId,
       sendText: sendTextAdapter,
+      sendMedia: sendMediaAdapter,
       verbose: true,
     });
     pmStatus.lastOk   = res?.ok ?? 0;

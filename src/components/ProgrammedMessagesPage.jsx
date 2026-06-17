@@ -27,6 +27,8 @@ function nextHour(existing = []) {
   }
   return "00:00";
 }
+const isImageMime = (mime = "") => String(mime).startsWith("image/");
+const isVideoMime = (mime = "") => String(mime).startsWith("video/");
 
 export default function ProgrammedMessagesPage() {
   // ====== saving / editing ids ======
@@ -158,6 +160,7 @@ export default function ProgrammedMessagesPage() {
           setCurrentId(null);
           setTitle(active.title || "Nuevo Programado");
           setParts([""]);
+          setAttachments([[]]);
           setFunnel({ level1:false, level2:false, level3:false, level4:false });
           setPreset("custom");
           setDelayHours(12);
@@ -176,6 +179,7 @@ export default function ProgrammedMessagesPage() {
 
         const msgs = Array.isArray(meta.messages) ? meta.messages : [];
         setParts(msgs.length ? msgs.map(m => m?.text || "") : [""]);
+        setAttachments(msgs.length ? msgs.map(m => Array.isArray(m.files) ? m.files.map(toRemoteItem) : []) : [[]]);
 
         const mm = meta.misc || {};
         setFunnel({
@@ -196,6 +200,7 @@ export default function ProgrammedMessagesPage() {
         setCurrentId(null);
         setTitle(active.title || "Nuevo Programado");
         setParts([""]);
+        setAttachments([[]]);
         setFunnel({ level1:false, level2:false, level3:false, level4:false });
         setPreset("custom");
         setDelayHours(12);
@@ -209,8 +214,64 @@ export default function ProgrammedMessagesPage() {
     })();
   }, [active]);
 
+  const toRemoteItem = (srv = {}) => {
+    const url = srv.absUrl || srv.url || "";
+    return {
+      key: `remote:${url}`,
+      name: srv.name || srv.storedName || "media",
+      mimeType: srv.mimeType || srv.mime || "",
+      url,
+      remote: true,
+      size: srv.size,
+    };
+  };
+
+  const toLocalItem = (file) => ({
+    key: `local:${file.name}|${file.size}|${file.lastModified}`,
+    name: file.name,
+    mimeType: file.type,
+    file,
+    previewUrl: URL.createObjectURL(file),
+    remote: false,
+  });
+
   const updatePart = (i, val) =>
     setParts(prev => prev.map((p, idx) => (idx === i ? val : p)));
+
+  const addPart = () => {
+    setParts(prev => [...prev, ""]);
+    setAttachments(prev => [...prev, []]);
+  };
+
+  const removePart = (i) => {
+    setParts(prev => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+    setAttachments(prev => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  };
+
+  const addFilesToPart = (i, fileList) => {
+    const incomingFiles = Array.from(fileList || [])
+      .filter(f => isImageMime(f.type) || isVideoMime(f.type))
+      .map(toLocalItem);
+
+    setAttachments(prev => {
+      const clone = prev.map(arr => [...arr]);
+      const cur = clone[i] || [];
+      const dedupe = new Map(cur.map(x => [x.key, x]));
+      incomingFiles.forEach(x => dedupe.set(x.key, x));
+      clone[i] = Array.from(dedupe.values());
+      return clone;
+    });
+  };
+
+  const removeFileFromPart = (i, idx) => {
+    setAttachments(prev => {
+      const clone = prev.map(arr => [...arr]);
+      const it = clone[i]?.[idx];
+      if (it?.previewUrl) URL.revokeObjectURL(it.previewUrl);
+      clone[i].splice(idx, 1);
+      return clone;
+    });
+  };
 
   // ====== MISC CONFIG (third column) ======
   const [funnel, setFunnel] = useState({
@@ -232,8 +293,14 @@ export default function ProgrammedMessagesPage() {
 
   // ====== DERIVED PAYLOAD PIECES ======
   const contentsList = useMemo(
-    () => parts.map(p => ({ text: p || "", files: [], delayMs: 0 })),
-    [parts]
+    () => parts.map((p, i) => ({
+      text: p || "",
+      files: (attachments[i] || []).map(it => it.remote
+        ? { url: it.url, name: it.name, mime: it.mimeType, size: it.size }
+        : it.file),
+      delayMs: 0,
+    })),
+    [parts, attachments]
   );
   const flags = useMemo(
     () => ({
@@ -261,6 +328,7 @@ export default function ProgrammedMessagesPage() {
     setCurrentId(null);
     setTitle("Nuevo Programado");
     setParts([""]);
+    setAttachments([[]]);
     setFunnel({ level1: false, level2: false, level3: false, level4: false });
     setDelayHours(12);
     setSlots([]);
@@ -467,10 +535,71 @@ export default function ProgrammedMessagesPage() {
                   value={val}
                   onChange={(e) => updatePart(i, e.target.value)}
                 />
+                <input
+                  id={`pm-file-${i}`}
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    addFilesToPart(i, e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="sr-btn sr-btn-light"
+                  onClick={() => document.getElementById(`pm-file-${i}`)?.click()}
+                  style={{ position: "absolute", right: 48, bottom: 8 }}
+                  title="Adjuntar imagen o video"
+                >
+                  📎
+                </button>
                 <span className="sr-counter">{val.length}</span>
+              </div>
+
+              {!!(attachments[i]?.length) && (
+                <div className="sr-files">
+                  {attachments[i].map((it, idx) => {
+                    const mime = it.mimeType || "";
+                    const isImg = isImageMime(mime);
+                    const isVid = isVideoMime(mime);
+                    const src = it.previewUrl || it.url;
+
+                    return (
+                      <div
+                        className={`sr-filechip ${isImg ? "img" : isVid ? "vid" : ""}`}
+                        key={it.key}
+                        title={it.name}
+                      >
+                        {isImg && <img src={src} alt={it.name} />}
+                        {isVid && <video src={src} muted controls playsInline />}
+                        <span className="sr-file-name">{it.name}</span>
+                        <button
+                          type="button"
+                          className="sr-file-x"
+                          onClick={() => removeFileFromPart(i, idx)}
+                          aria-label="Quitar archivo"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ marginTop: 6 }}>
+                <button type="button" className="sr-btn sr-btn-light" onClick={() => removePart(i)}>
+                  Borrar
+                </button>
               </div>
             </div>
           ))}
+
+          <button type="button" className="sr-add-dashed" onClick={addPart}>
+            agrega otro mensaje
+          </button>
 
           <div className="sr-actions-right">
             <button type="button" className="sr-btn ghost" disabled={saving}>Cancelar</button>

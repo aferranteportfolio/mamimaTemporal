@@ -168,12 +168,22 @@ export async function saveProgrammedMessage({ id, title, messages, misc, schedul
   const form = new FormData();
   const withCids = (messages || []).map((m, idx) => {
     const fileCids = [];
+    const files = [];
     (m.files || []).forEach((file, i) => {
-      const cid = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}-${idx}-${i}`;
-      fileCids.push(cid);
-      form.append(`file:${cid}`, file, `cid:${cid}`);
+      if (file instanceof File) {
+        const cid = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}-${idx}-${i}`;
+        fileCids.push(cid);
+        form.append(`file:${cid}`, file, `cid:${cid}`);
+      } else if (file?.url || file?.absUrl) {
+        files.push({
+          url: file.url || file.absUrl,
+          name: file.name || file.storedName || "media",
+          mime: file.mime || file.mimeType || "",
+          size: file.size,
+        });
+      }
     });
-    return { text: m.text || "", delayMs: m.delayMs ?? 0, fileCids };
+    return { text: m.text || "", files, delayMs: m.delayMs ?? 0, fileCids };
   });
   form.append("meta", JSON.stringify({ id, title, messages: withCids, misc, schedule, targeting, testing }));
 
