@@ -2,7 +2,9 @@ import { useMemo, useState, useEffect } from "react";
 import {
   saveProgrammedMessage,
   listProgrammedMessages,
-  getProgrammedMessage
+  getProgrammedMessage,
+  queueProgrammedMessageTest,
+  listProductTags
 } from "../api/realApi.js";
 
 // --- helpers (pure) ---
@@ -33,6 +35,8 @@ export default function ProgrammedMessagesPage() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [productTagOptions, setProductTagOptions] = useState([]);
+  const [tagErr, setTagErr] = useState(null);
 
   useEffect(() => {
     let dead = false;
@@ -68,6 +72,20 @@ export default function ProgrammedMessagesPage() {
         setErr(e.message || String(e));
       } finally {
         if (!dead) setLoading(false);
+      }
+    })();
+    return () => { dead = true; };
+  }, []);
+
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const { items } = await listProductTags();
+        if (!dead) setProductTagOptions(Array.isArray(items) ? items : []);
+      } catch (e) {
+        console.warn("[PM] product tags failed:", e);
+        if (!dead) setTagErr(e.message || String(e));
       }
     })();
     return () => { dead = true; };
@@ -121,7 +139,11 @@ export default function ProgrammedMessagesPage() {
           setParts([""]);
           setFunnel({ level1:false, level2:false, level3:false, level4:false });
           setPreset("custom");
+          setDelayHours(12);
           setSlots([]);
+          setSelectedProductTags([]);
+          setTestPhoneNumber("");
+          setTestStatus(null);
           return;
         }
 
@@ -144,7 +166,10 @@ export default function ProgrammedMessagesPage() {
 
         const sch = meta.schedule || {};
         setPreset(sch.preset || "custom");
+        setDelayHours(Number(sch.delayHours) || 23.5);
         setSlots(Array.isArray(sch.times) ? sch.times : []);
+        setSelectedProductTags(Array.isArray(meta.targeting?.productTags) ? meta.targeting.productTags : []);
+        setTestPhoneNumber(meta.testing?.phoneNumber || "");
       } catch (e) {
         console.error("[PM] load active failed:", e);
         setCurrentId(null);
@@ -152,7 +177,11 @@ export default function ProgrammedMessagesPage() {
         setParts([""]);
         setFunnel({ level1:false, level2:false, level3:false, level4:false });
         setPreset("custom");
+        setDelayHours(12);
         setSlots([]);
+        setSelectedProductTags([]);
+        setTestPhoneNumber("");
+        setTestStatus(null);
       } finally {
         setActiveLoading(false);
       }
@@ -172,7 +201,11 @@ export default function ProgrammedMessagesPage() {
 
   // ====== 24H HOURS (fourth column) ======
   const [preset, setPreset] = useState("custom");
+  const [delayHours, setDelayHours] = useState(12);
   const [slots, setSlots] = useState(["15:00", "16:00", "17:00"]);
+  const [selectedProductTags, setSelectedProductTags] = useState([]);
+  const [testPhoneNumber, setTestPhoneNumber] = useState("");
+  const [testStatus, setTestStatus] = useState(null);
   const addSlot = (hhmm) => setSlots(s => (s.includes(hhmm) ? s : [...s, hhmm].sort()));
   const removeSlot = (hhmm) => setSlots(s => s.filter(x => x !== hhmm));
 
@@ -192,6 +225,12 @@ export default function ProgrammedMessagesPage() {
   );
   const schedulePreset = preset;
   const orderedTimes = useMemo(() => [...slots].sort(), [slots]);
+  const normalizedDelayHours = Number(delayHours) > 0 ? Number(delayHours) : 12;
+  const toggleProductTag = (tag) => {
+    setSelectedProductTags(prev => prev.includes(tag)
+      ? prev.filter(x => x !== tag)
+      : [...prev, tag].sort());
+  };
 
   // ====== ACTIONS ======
   const onAdd = () => {
@@ -202,7 +241,10 @@ export default function ProgrammedMessagesPage() {
     setTitle("Nuevo Programado");
     setParts([""]);
     setFunnel({ level1: false, level2: false, level3: false, level4: false });
+    setDelayHours(12);
     setSlots([]);
+    setSelectedProductTags([]);
+    setTestPhoneNumber("");
   };
 
   const onDelete = async (id) => {
@@ -225,7 +267,14 @@ export default function ProgrammedMessagesPage() {
           funnelLevel3: flags.f3,
           funnelLevel4: flags.f4,
         },
-        schedule: { preset: schedulePreset, times: orderedTimes },
+        schedule: {
+          mode: "delayAfterInbound",
+          delayHours: normalizedDelayHours,
+          preset: schedulePreset,
+          times: orderedTimes,
+        },
+        targeting: { productTags: selectedProductTags },
+        testing: { phoneNumber: testPhoneNumber },
       };
 
       const saved = await saveProgrammedMessage(payload);
@@ -241,6 +290,57 @@ export default function ProgrammedMessagesPage() {
       console.log("Guardado ✅", saved);
     } catch (e) {
       console.error("No se pudo guardar", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onQueueTest = async () => {
+    const phone = String(testPhoneNumber || "").replace(/\D/g, "");
+    if (!phone) {
+      setTestStatus({ type: "error", text: "Enter a WhatsApp test number first." });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setTestStatus(null);
+
+      // Always save first so the dispatcher tests exactly what is currently in
+      // the config screen: message text, funnel, tags, delay metadata, and the
+      // manually-entered test phone number.
+      const saved = await saveProgrammedMessage({
+        id: currentId || undefined,
+        title,
+        messages: contentsList,
+        misc: {
+          funnelLevel1: flags.f1,
+          funnelLevel2: flags.f2,
+          funnelLevel3: flags.f3,
+          funnelLevel4: flags.f4,
+        },
+        schedule: {
+          mode: "delayAfterInbound",
+          delayHours: normalizedDelayHours,
+          preset: schedulePreset,
+          times: orderedTimes,
+        },
+        targeting: { productTags: selectedProductTags },
+        testing: { phoneNumber: phone },
+      });
+
+      setCurrentId(saved.id);
+      setActiveId(saved.id);
+      setList(prev => [{ id: saved.id, title: saved.title }, ...prev.filter(x => x.id !== saved.id && x.id !== activeId)]);
+
+      const queued = await queueProgrammedMessageTest(saved.id, { phoneNumber: phone });
+      setTestStatus({
+        type: "ok",
+        text: `Test queued for ${queued.customer_id}. It is due now; run the PM dispatcher or wait for the next loop tick.`,
+      });
+    } catch (e) {
+      console.error("No se pudo encolar prueba", e);
+      setTestStatus({ type: "error", text: e.message || String(e) });
     } finally {
       setSaving(false);
     }
@@ -384,7 +484,7 @@ export default function ProgrammedMessagesPage() {
           ))}
 
           <div className="sr-trigger-savewrap">
-            <button className="sr-btn sr-btn-primary" onClick={onSave} disabled={saving}>
+            <button type="button" className="sr-btn sr-btn-primary" onClick={onSave} disabled={saving}>
               SAVE
             </button>
           </div>
@@ -399,8 +499,60 @@ export default function ProgrammedMessagesPage() {
         </div>
 
         <div className="sr-misc-body">
+          <div className="sr-card" style={{ padding: 12, marginBottom: 12 }}>
+            <label className="sr-label">Send after customer inactivity</label>
+            <select
+              className="sr-select"
+              value={String(delayHours)}
+              onChange={e => setDelayHours(e.target.value === "custom" ? delayHours : Number(e.target.value))}
+            >
+              <option value="2">2 hours after last customer message</option>
+              <option value="4">4 hours after last customer message</option>
+              <option value="6">6 hours after last customer message</option>
+              <option value="12">12 hours after last customer message</option>
+              <option value="18">18 hours after last customer message</option>
+              <option value="23.5">23.5 hours / near 24h</option>
+            </select>
+            <input
+              className="sr-pill-input"
+              type="number"
+              min="0.25"
+              max="23.5"
+              step="0.25"
+              value={delayHours}
+              onChange={e => setDelayHours(e.target.value)}
+              aria-label="Custom delay hours after customer message"
+              style={{ marginTop: 8 }}
+            />
+          </div>
+
+          <div className="sr-card" style={{ padding: 12, marginBottom: 12 }}>
+            <label className="sr-label">Product tag targeting</label>
+            {tagErr && <div className="sr-empty">Tags unavailable: {tagErr}</div>}
+            {!tagErr && productTagOptions.length === 0 && (
+              <div className="sr-empty">No product tags found; all products will match.</div>
+            )}
+            <div style={{ display: "grid", gap: 6, maxHeight: 140, overflow: "auto" }}>
+              {productTagOptions.map(tag => (
+                <label key={tag.value} className="sr-misc-check">
+                  <input
+                    type="checkbox"
+                    checked={selectedProductTags.includes(tag.value)}
+                    onChange={() => toggleProductTag(tag.value)}
+                  />
+                  <span>{tag.label || tag.value}</span>
+                </label>
+              ))}
+            </div>
+            <p className="sr-note">
+              {selectedProductTags.length
+                ? `Selected: ${selectedProductTags.join(", ")}`
+                : "No tags selected: all products/tags are eligible."}
+            </p>
+          </div>
+
           <div style={{ marginBottom: 10 }}>
-            <div className="sr-col-subtitle" style={{ textAlign: "center" }}>DROP DOWN MENU</div>
+            <div className="sr-col-subtitle" style={{ textAlign: "center" }}>LEGACY TIME PRESETS</div>
             <select
               className="sr-select"
               value={preset}
@@ -408,14 +560,14 @@ export default function ProgrammedMessagesPage() {
                 const v = e.target.value; setPreset(v);
                 if (v === "morning") setSlots(["09:00","10:00","11:00"]);
                 else if (v === "afternoon") setSlots(["15:00","16:00","17:00"]);
-                else if (v === "evening") setSlots(["19:00","20:00","21:00"]);
+                else if (v === "evening") setSlots(["19:00"]);
                 else setSlots([]);
               }}
             >
               <option value="custom">Custom</option>
               <option value="morning">Morning (9–11)</option>
               <option value="afternoon">Afternoon (15–17)</option>
-              <option value="evening">Evening (19–21)</option>
+              <option value="evening">Evening (19 only; backend legacy business hours end at 20:00)</option>
             </select>
           </div>
 
@@ -442,9 +594,34 @@ export default function ProgrammedMessagesPage() {
             </div>
           </div>
 
+          <div className="sr-card" style={{ padding: 12, marginTop: 12 }}>
+            <label className="sr-label">Manual test WhatsApp number</label>
+            <input
+              className="sr-pill-input"
+              placeholder="Ej. 51999999999"
+              value={testPhoneNumber}
+              onChange={e => setTestPhoneNumber(e.target.value)}
+            />
+            <button
+              type="button"
+              className="sr-btn sr-btn-primary"
+              style={{ marginTop: 8 }}
+              disabled={saving || !testPhoneNumber.trim()}
+              onClick={onQueueTest}
+            >
+              Queue test now
+            </button>
+            {testStatus && (
+              <p className="sr-note" style={{ color: testStatus.type === "error" ? "#b91c1c" : "#166534" }}>
+                {testStatus.text}
+              </p>
+            )}
+          </div>
+
           <p className="sr-note">
-            • Los horarios se ejecutarán dentro de la ventana de 24h del último mensaje del cliente.  
-            • Respeta quiet hours y límites WABA si configuras reglas.
+            • New messages use the delay above, e.g. 12h after the latest customer message.
+            • Queue test now creates a due test task for the typed number without waiting for the configured delay.
+            • Legacy hour presets are preserved as metadata; the backend still enforces the 24h safety window.
           </p>
         </div>
       </aside>

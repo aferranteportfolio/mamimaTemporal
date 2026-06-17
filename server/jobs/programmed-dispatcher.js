@@ -39,11 +39,14 @@ export function installConnectionEventLogs() {
 const queueSchema = new mongoose.Schema(
   {
     state_id:    Number,
+    program_id:  String,
     customer_id: String,
     sellerId:    String,
 
     // when this row is allowed to be sent
     sendAt:      { type: Date },
+    productTags: [String],
+    dedupeKey:   String,
 
     sent:        { type: Boolean, default: false },
     created_at:  { type: Date, default: Date.now },
@@ -250,7 +253,9 @@ export async function runProgrammedDispatcher({
   }
   if (programs.length === 0) return { ok: 0, fail: 0 };
 
-  // 👇 NEW: ignore schedule.times – just use programs that have a funnelLevelX
+  // Use programs that have a funnelLevelX. New tasks store program_id so
+  // multiple programmed messages can target the same funnel safely; legacy
+  // tasks without program_id still fall back to the first matching funnel.
   const mapped = programs
     .map((p) => ({
       ...p,
@@ -292,8 +297,11 @@ export async function runProgrammedDispatcher({
   let fail = 0;
 
   for (const row of rows) {
-    // pick program whose funnelLevel matches row.state_id
-    const program = mapped.find((p) => p.state === row.state_id);
+    // Prefer the exact programmed message captured when the task was created.
+    // Legacy rows created before program_id existed fall back by funnel state.
+    const program = row.program_id
+      ? mapped.find((p) => p.id === row.program_id && p.state === row.state_id)
+      : mapped.find((p) => p.state === row.state_id);
     if (!program) {
       if (verbose) {
       }

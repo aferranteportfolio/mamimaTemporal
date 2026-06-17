@@ -164,7 +164,7 @@ export async function markSavedReplyUsed(id, { to } = {}) {
 }
 
 
-export async function saveProgrammedMessage({ id, title, messages, misc, schedule }) {
+export async function saveProgrammedMessage({ id, title, messages, misc, schedule, targeting, testing }) {
   const form = new FormData();
   const withCids = (messages || []).map((m, idx) => {
     const fileCids = [];
@@ -175,7 +175,7 @@ export async function saveProgrammedMessage({ id, title, messages, misc, schedul
     });
     return { text: m.text || "", delayMs: m.delayMs ?? 0, fileCids };
   });
-  form.append("meta", JSON.stringify({ id, title, messages: withCids, misc, schedule }));
+  form.append("meta", JSON.stringify({ id, title, messages: withCids, misc, schedule, targeting, testing }));
 
   const API_BASE =
     (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/,"")) ||
@@ -190,6 +190,30 @@ export async function saveProgrammedMessage({ id, title, messages, misc, schedul
   const res = await fetch(url, { method: id ? "PUT" : "POST", body: form });
   if (!res.ok) throw new Error(`Save failed: ${res.status}`);
   return res.json();
+}
+
+export async function queueProgrammedMessageTest(id, { phoneNumber, sellerId } = {}) {
+  const API_BASE =
+    (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/, "")) ||
+    (typeof window !== "undefined" && `${location.protocol}//${location.hostname}:3050`) ||
+    "";
+  const res = await fetch(`${API_BASE}/api/programmed-messages/${encodeURIComponent(id)}/test-task`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify({ phoneNumber, sellerId }),
+  });
+  if (!res.ok) throw new Error(`Test queue failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listProductTags() {
+  const API_BASE =
+    (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/, "")) ||
+    (typeof window !== "undefined" && `${location.protocol}//${location.hostname}:3050`) ||
+    "";
+  const res = await fetch(`${API_BASE}/api/product-tags`);
+  if (!res.ok) throw new Error(`Product tags failed: ${res.status}`);
+  return res.json(); // { items: [{ value, label }] }
 }
 
 export async function listProgrammedMessages() {

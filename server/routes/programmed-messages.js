@@ -5,6 +5,8 @@ import fssync from "node:fs";
 import express from "express";
 import multer from "multer";
 import crypto from "node:crypto";
+import { Product } from "../dbFunctionality/schemas/schema.js";
+import { MessageTask } from "../dbFunctionality/schemas/messageTask.js";
 
 export const programmedMessagesRouter = express.Router();
 
@@ -36,7 +38,25 @@ async function readJson(file, fallback = null) {
   catch { return fallback; }
 }
 
+const cleanTags = (tags = []) =>
+  [...new Set((Array.isArray(tags) ? tags : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean))];
+
+function activeStateFromMisc(misc = {}) {
+  if (misc.funnelLevel1) return 1;
+  if (misc.funnelLevel2) return 2;
+  if (misc.funnelLevel3) return 3;
+  if (misc.funnelLevel4) return 4;
+  return null;
+}
+
+const normalizePhone = (phone = "") => String(phone || "").replace(/\D/g, "");
+
 function normalizeMeta(raw = {}) {
+  const delayHours = Number(raw?.schedule?.delayHours);
+  const mode = raw?.schedule?.mode === "delayAfterInbound" ? "delayAfterInbound" : "legacy24h";
+
   // shape guaranteed on disk
   return {
     id: raw.id || rid(10),
@@ -49,8 +69,16 @@ function normalizeMeta(raw = {}) {
       funnelLevel4: !!raw?.misc?.funnelLevel4,
     },
     schedule: {
+      mode,
+      delayHours: Number.isFinite(delayHours) && delayHours > 0 ? delayHours : 23.5,
       preset: raw?.schedule?.preset || "custom",
-      times: Array.isArray(raw?.schedule?.times) ? raw.schedule.times : [] // e.g. ["15:00","16:00","17:00"]
+      times: Array.isArray(raw?.schedule?.times) ? raw.schedule.times : [] // legacy fixed-hour UI metadata
+    },
+    targeting: {
+      productTags: cleanTags(raw?.targeting?.productTags)
+    },
+    testing: {
+      phoneNumber: normalizePhone(raw?.testing?.phoneNumber)
     },
     usageCount: raw.usageCount || 0,
     lastUsedAt: raw.lastUsedAt || null,
@@ -80,6 +108,36 @@ async function saveFilesToFolder(req, folderAbs, files = []) {
   return saved;
 }
 
+
+// ---------- product tag list ----------
+programmedMessagesRouter.get("/product-tags/list", async (req, res) => {
+  try {
+    const docs = await Product.find({}, { "state.productObject.product_info_requested": 1, costumer_profile: 1 }).lean();
+    const tags = new Set();
+
+    for (const doc of docs) {
+      for (const state of doc.state || []) {
+        for (const item of state.productObject || []) {
+          if (item?.product_info_requested) tags.add(String(item.product_info_requested).trim());
+        }
+      }
+      for (const profile of doc.costumer_profile || []) {
+        if (profile?.productOfInterest) tags.add(String(profile.productOfInterest).trim());
+      }
+    }
+
+    const items = [...tags]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .map((tag) => ({ value: tag, label: tag.replace(/[_-]+/g, " ") }));
+
+    res.json({ items });
+  } catch (err) {
+    console.error("[PM] product-tags error:", err);
+    res.status(500).json({ error: "product_tags_failed" });
+  }
+});
+
 // ---------- list ----------
 programmedMessagesRouter.get("/", async (req, res) => {
   const entries = await fs.readdir(BASE_DIR, { withFileTypes: true });
@@ -99,6 +157,52 @@ programmedMessagesRouter.get("/:id", async (req, res) => {
   const meta = await readJson(path.join(dir, "meta.json"));
   if (!meta) return res.status(404).json({ error: "not_found" });
   res.json(meta);
+});
+
+// ---------- queue a due test task ----------
+programmedMessagesRouter.post("/:id/test-task", async (req, res) => {
+  try {
+    const dir = path.join(BASE_DIR, req.params.id);
+    const rawMeta = await readJson(path.join(dir, "meta.json"), null);
+    if (!rawMeta) return res.status(404).json({ error: "not_found" });
+    const meta = normalizeMeta(rawMeta);
+
+    const customerId = normalizePhone(req.body?.phoneNumber || meta?.testing?.phoneNumber);
+    if (!customerId) {
+      return res.status(400).json({ error: "missing_phone_number" });
+    }
+
+    const stateId = activeStateFromMisc(meta.misc);
+    if (!stateId) {
+      return res.status(400).json({ error: "missing_funnel_level" });
+    }
+
+    // This is intentionally due immediately so you can test a configured
+    // programmed message without waiting 12h/18h. The normal dispatcher still
+    // owns the actual WhatsApp send path and will keep its final 24h guard.
+    const dedupeKey = `test:${meta.id}:${customerId}:${Date.now()}:${rid(4)}`;
+    const task = await MessageTask.create({
+      state_id: stateId,
+      program_id: meta.id,
+      customer_id: customerId,
+      sellerId: req.body?.sellerId ? String(req.body.sellerId) : "manual-test",
+      sendAt: new Date(),
+      productTags: cleanTags(meta?.targeting?.productTags),
+      dedupeKey,
+    });
+
+    res.status(201).json({
+      ok: true,
+      taskId: String(task._id),
+      customer_id: customerId,
+      program_id: meta.id,
+      state_id: stateId,
+      sendAt: task.sendAt,
+    });
+  } catch (err) {
+    console.error("[PM] test-task error:", err);
+    res.status(400).json({ error: "test_task_failed", detail: String(err?.message || err) });
+  }
 });
 
 // ---------- create ----------

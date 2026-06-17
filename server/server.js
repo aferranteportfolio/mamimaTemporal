@@ -1199,6 +1199,32 @@ app.use("/api/saved-replies", (req, res, next) => {
 });
 
 
+
+app.get("/api/product-tags", async (req, res) => {
+  try {
+    const docs = await Product.find({}, { "state.productObject.product_info_requested": 1, costumer_profile: 1 }).lean();
+    const tags = new Set();
+    for (const doc of docs) {
+      for (const state of doc.state || []) {
+        for (const item of state.productObject || []) {
+          if (item?.product_info_requested) tags.add(String(item.product_info_requested).trim());
+        }
+      }
+      for (const profile of doc.costumer_profile || []) {
+        if (profile?.productOfInterest) tags.add(String(profile.productOfInterest).trim());
+      }
+    }
+    const items = [...tags]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .map((tag) => ({ value: tag, label: tag.replace(/[_-]+/g, " ") }));
+    res.json({ items });
+  } catch (err) {
+    console.error("[API/product-tags] failed:", err);
+    res.status(500).json({ error: "product_tags_failed" });
+  }
+});
+
 mountProgrammedMessagesStatic(app); // serves /programmedmsgs/** files
 app.use("/api/programmed-messages", programmedMessagesRouter);
 

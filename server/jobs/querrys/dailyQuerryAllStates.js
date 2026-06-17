@@ -1,10 +1,14 @@
 // server/jobs/dailyQuerryAllStates.mjs
 import mongoose from 'mongoose';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import fssync from 'node:fs';
 import { Product } from '../../dbFunctionality/schemas/schema.js';
 import { MessageTask } from '../../dbFunctionality/schemas/messageTask.js';
 import { computeSendAt } from '../pm/time-utils.js';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/whatsAppDB_3';
+const BASE_DIR = path.resolve(process.cwd(), 'programmedmsgs');
 
 async function connectDB() {
   if (mongoose.connection.readyState === 0) {
@@ -17,14 +21,88 @@ const WINDOW_MS      = 24 * 60 * 60 * 1000;
 // How long we wait after *your* last message before treating convo as "abandoned"
 const INACTIVITY_MS  = 2 * 60 * 60 * 1000; // 2 hours
 
+function activeStateFromMisc(misc = {}) {
+  if (misc.funnelLevel1) return 1;
+  if (misc.funnelLevel2) return 2;
+  if (misc.funnelLevel3) return 3;
+  if (misc.funnelLevel4) return 4;
+  return null;
+}
+
+async function listPrograms() {
+  if (!fssync.existsSync(BASE_DIR)) return [];
+  const dirs = await fs.readdir(BASE_DIR, { withFileTypes: true });
+  const out = [];
+
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    const metaPath = path.join(BASE_DIR, d.name, 'meta.json');
+    try {
+      const meta = JSON.parse(await fs.readFile(metaPath, 'utf8'));
+      const state = activeStateFromMisc(meta?.misc);
+      if (state) out.push({ id: meta.id || d.name, state, meta });
+    } catch {
+      // Ignore malformed programmed-message folders.
+    }
+  }
+
+  return out;
+}
+
+function cleanTags(tags = []) {
+  return [...new Set((Array.isArray(tags) ? tags : [])
+    .map((x) => String(x || '').trim())
+    .filter(Boolean))];
+}
+
+function productTagsFor(product) {
+  const tags = [];
+  for (const s of product.state || []) {
+    for (const item of s.productObject || []) {
+      if (item?.product_info_requested) tags.push(item.product_info_requested);
+    }
+  }
+  for (const profile of product.costumer_profile || []) {
+    if (profile?.productOfInterest) tags.push(profile.productOfInterest);
+  }
+  return cleanTags(tags);
+}
+
+function tagsMatch(productTags, selectedTags) {
+  const selected = cleanTags(selectedTags);
+  if (!selected.length) return true; // backward compatible: no targeting means all products.
+  const productSet = new Set(cleanTags(productTags));
+  return selected.some((tag) => productSet.has(tag));
+}
+
+function hasFunnelState(state = [], funnelState) {
+  return state.some((s) => s.purchase_state?.some((ps) => ps.funnel_state === funnelState));
+}
+
+function state2IsValid(state = []) {
+  return state.some((s) => {
+    const lastShipping = s.shippingStatus?.[s.shippingStatus.length - 1];
+    const lastFunnel = s.purchase_state?.[s.purchase_state.length - 1];
+    const lastSent = s.messagesSentCollection?.[s.messagesSentCollection.length - 1];
+    return lastFunnel?.funnel_state === 2 && !!lastShipping && !!lastSent;
+  });
+}
+
+function productMatchesProgramState(productState = [], programState) {
+  if (programState === 1) return hasFunnelState(productState, 0);
+  if (programState === 2) return state2IsValid(productState);
+  return hasFunnelState(productState, programState);
+}
+
 export async function dailyQuerryAllStates() {
   await connectDB();
+
+  const programs = await listPrograms();
+  if (!programs.length) return [];
 
   const nowMs = Date.now();
   const minLastInbound = new Date(nowMs - WINDOW_MS);
 
-  // 1) Single Mongo query for all relevant funnel states
-  //    Now: funnel_state 0, 2, 3, 4, 5
   const rawProducts = await Product.find({
     lastInboundTs: { $gte: minLastInbound },
     'state.purchase_state': {
@@ -32,13 +110,12 @@ export async function dailyQuerryAllStates() {
     }
   }).lean();
 
-  const candidates = []; // { state_id, customer_id, sellerId, key, sendAt }
+  const candidates = []; // { program_id, state_id, customer_id, sellerId, sendAt, productTags, dedupeKey }
 
   for (const product of rawProducts) {
     const { customer_id, latestSeller, customer_messages, state, lastInboundTs } = product;
     if (!customer_id || !latestSeller || !state?.length) continue;
 
-    // --- COMMON: latest customer msg & lastInbound ----
     const latestCustomerMsg = customer_messages?.length
       ? customer_messages.reduce((a, b) => (b.timestamp > a.timestamp ? b : a))
       : null;
@@ -46,7 +123,10 @@ export async function dailyQuerryAllStates() {
     const effectiveLastInbound = lastInboundTs || latestCustomerMsg?.timestamp;
     if (!effectiveLastInbound) continue;
 
-    // --- COMMON: latest seller message (any state) ---
+    const lastInboundDate = new Date(effectiveLastInbound);
+    if (Number.isNaN(lastInboundDate.getTime())) continue;
+    if (nowMs - lastInboundDate.getTime() > WINDOW_MS) continue;
+
     let latestSentMsg = null;
     for (const s of state) {
       if (!s.messagesSentCollection?.length) continue;
@@ -57,22 +137,13 @@ export async function dailyQuerryAllStates() {
     }
 
     // If there is no seller msg, or customer replied after the last seller msg → nothing is "abandoned" yet.
-    if (
-      !latestSentMsg ||
-      (latestCustomerMsg && latestCustomerMsg.timestamp > latestSentMsg.timestamp)
-    ) {
+    if (!latestSentMsg || (latestCustomerMsg && latestCustomerMsg.timestamp > latestSentMsg.timestamp)) {
       continue;
     }
 
-    // ⏱️ NEW: require some inactivity since *your* last message
     const idleMs = nowMs - new Date(latestSentMsg.timestamp).getTime();
-    if (idleMs < INACTIVITY_MS) {
-      // Conversation is still fresh; don't schedule remarketing yet
-      continue;
-    }
+    if (idleMs < INACTIVITY_MS) continue;
 
-    // --- COMMON: generic remarketing skip ---
-    // If ANY state block has remarketing_state set, we skip for this customer entirely.
     let hasRemarketing = false;
     for (const s of state) {
       const reMarketing = s.reMarketing;
@@ -85,174 +156,57 @@ export async function dailyQuerryAllStates() {
     }
     if (hasRemarketing) continue;
 
-    const keyBase = `${customer_id}-${latestSeller}`;
+    const productTags = productTagsFor(product);
 
-    // =========================================================
-    //  STATE 0 BRANCH → state_id = 1 (your original mapping)
-    // =========================================================
-    {
-      const hasFunnel0 = state.some((s) =>
-        s.purchase_state?.some((ps) => ps.funnel_state === 0)
-      );
+    for (const program of programs) {
+      if (!productMatchesProgramState(state, program.state)) continue;
 
-      if (hasFunnel0) {
-        const sendAt0 = computeSendAt(new Date(effectiveLastInbound));
-        if (sendAt0) {
-          candidates.push({
-            state_id: 1,
-            customer_id,
-            sellerId: latestSeller,
-            key: `1:${keyBase}`,
-            sendAt: sendAt0
-          });
-        }
-      }
-    }
+      const selectedTags = cleanTags(program.meta?.targeting?.productTags);
+      if (!tagsMatch(productTags, selectedTags)) continue;
 
-    // =========================================================
-    //  STATE 2 BRANCH → state_id = 2
-    //  (shipping info given, but no progress)
-    // =========================================================
-    {
-      let validState2 = null;
+      const sendAt = computeSendAt(lastInboundDate, program.meta?.schedule);
+      if (!sendAt) continue;
 
-      for (const s of state) {
-        const lastShipping = s.shippingStatus?.[s.shippingStatus.length - 1];
-        const lastFunnel   = s.purchase_state?.[s.purchase_state.length - 1];
+      const dedupeTags = selectedTags.length ? selectedTags.sort().join('|') : 'all';
+      const dedupeKey = `${program.id}:${program.state}:${customer_id}:${latestSeller}:${dedupeTags}`;
 
-        const funnelOk   = lastFunnel?.funnel_state === 2;
-        const shippingOk = !!lastShipping;
-
-        if (funnelOk && shippingOk) {
-          validState2 = s;
-          break;
-        }
-      }
-
-      if (validState2) {
-        const messages        = validState2.messagesSentCollection || [];
-        const lastSentInState = messages[messages.length - 1] || null;
-        const sentOk          = !!lastSentInState;
-
-        if (sentOk) {
-          const sendAt2 = computeSendAt(new Date(effectiveLastInbound));
-          if (sendAt2) {
-            candidates.push({
-              state_id: 2,
-              customer_id,
-              sellerId: latestSeller,
-              key: `2:${keyBase}`,
-              sendAt: sendAt2
-            });
-          }
-        }
-      }
-    }
-
-    // =========================================================
-    //  STATE 3 BRANCH → state_id = 3
-    // =========================================================
-    {
-      const hasFunnel3 = state.some((s) =>
-        s.purchase_state?.some((ps) => ps.funnel_state === 3)
-      );
-
-      if (hasFunnel3) {
-        const sendAt3 = computeSendAt(new Date(effectiveLastInbound));
-        if (sendAt3) {
-          candidates.push({
-            state_id: 3,
-            customer_id,
-            sellerId: latestSeller,
-            key: `3:${keyBase}`,
-            sendAt: sendAt3
-          });
-        }
-      }
-    }
-
-    // =========================================================
-    //  STATE 4 BRANCH → state_id = 4
-    // =========================================================
-    {
-      const hasFunnel4 = state.some((s) =>
-        s.purchase_state?.some((ps) => ps.funnel_state === 4)
-      );
-
-      if (hasFunnel4) {
-        const sendAt4 = computeSendAt(new Date(effectiveLastInbound));
-        if (sendAt4) {
-          candidates.push({
-            state_id: 4,
-            customer_id,
-            sellerId: latestSeller,
-            key: `4:${keyBase}`,
-            sendAt: sendAt4
-          });
-        }
-      }
-    }
-
-    // =========================================================
-    //  STATE 5 BRANCH → state_id = 5
-    // =========================================================
-    {
-      const hasFunnel5 = state.some((s) =>
-        s.purchase_state?.some((ps) => ps.funnel_state === 5)
-      );
-
-      if (hasFunnel5) {
-        const sendAt5 = computeSendAt(new Date(effectiveLastInbound));
-        if (sendAt5) {
-          candidates.push({
-            state_id: 5,
-            customer_id,
-            sellerId: latestSeller,
-            key: `5:${keyBase}`,
-            sendAt: sendAt5
-          });
-        }
-      }
+      candidates.push({
+        program_id: program.id,
+        state_id: program.state,
+        customer_id,
+        sellerId: latestSeller,
+        sendAt,
+        productTags: selectedTags,
+        dedupeKey
+      });
     }
   }
 
-  // If no candidates, bail out early
-  if (!candidates.length) {
-    return [];
-  }
+  if (!candidates.length) return [];
 
-  // =========================================================
-  // 2) Anti-spam dedupe:
-  //    "If this customer_id already exists in message_tasks,
-  //     do NOT create ANY new task for them."
-  // =========================================================
-  const customerIdsToCheck = [...new Set(candidates.map(c => c.customer_id))];
-
+  const dedupeKeys = candidates.map((c) => c.dedupeKey);
   const existingTasks = await MessageTask.find(
-    { customer_id: { $in: customerIdsToCheck } },
-    { customer_id: 1 }
+    { dedupeKey: { $in: dedupeKeys } },
+    { dedupeKey: 1 }
   ).lean();
+  const existingDedupeSet = new Set(existingTasks.map((t) => t.dedupeKey));
 
-  const existingCustomerSet = new Set(
-    existingTasks.map(t => t.customer_id)
-  );
-
-  const results = [];
-  for (const c of candidates) {
-    if (existingCustomerSet.has(c.customer_id)) {
-      // This customer already has at least one task in message_tasks → skip
-      continue;
-    }
-
-    results.push({
-      state_id:   c.state_id,
+  const seenThisRun = new Set();
+  return candidates
+    .filter((c) => {
+      if (existingDedupeSet.has(c.dedupeKey) || seenThisRun.has(c.dedupeKey)) return false;
+      seenThisRun.add(c.dedupeKey);
+      return true;
+    })
+    .map((c) => ({
+      program_id:  c.program_id,
+      state_id:    c.state_id,
       customer_id: c.customer_id,
       sellerId:    c.sellerId,
-      sendAt:      c.sendAt
-    });
-  }
-
-  return results;
+      sendAt:      c.sendAt,
+      productTags: c.productTags,
+      dedupeKey:   c.dedupeKey
+    }));
 }
 
 // -----------------------------------------------------------
