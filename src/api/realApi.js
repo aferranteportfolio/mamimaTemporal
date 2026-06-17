@@ -206,6 +206,19 @@ export async function queueProgrammedMessageTest(id, { phoneNumber, sellerId } =
   return res.json();
 }
 
+export async function runProgrammedMessagesNow(force = false) {
+  const API_BASE =
+    (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/, "")) ||
+    (typeof window !== "undefined" && `${location.protocol}//${location.hostname}:3050`) ||
+    "";
+  const res = await fetch(`${API_BASE}/admin/pm/run?force=${force ? "true" : "false"}`, {
+    method: "POST",
+    headers: { "Accept": "application/json" },
+  });
+  if (!res.ok) throw new Error(`PM run failed: ${res.status}`);
+  return res.json();
+}
+
 export async function listProductTags() {
   const API_BASE =
     (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/, "")) ||

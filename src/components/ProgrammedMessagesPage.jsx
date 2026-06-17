@@ -4,7 +4,9 @@ import {
   listProgrammedMessages,
   getProgrammedMessage,
   queueProgrammedMessageTest,
-  listProductTags
+  runProgrammedMessagesNow,
+  listProductTags,
+  fetchConversations
 } from "../api/realApi.js";
 
 // --- helpers (pure) ---
@@ -37,6 +39,7 @@ export default function ProgrammedMessagesPage() {
   const [err, setErr] = useState(null);
   const [productTagOptions, setProductTagOptions] = useState([]);
   const [tagErr, setTagErr] = useState(null);
+  const [recentTestNumbers, setRecentTestNumbers] = useState([]);
 
   useEffect(() => {
     let dead = false;
@@ -86,6 +89,24 @@ export default function ProgrammedMessagesPage() {
       } catch (e) {
         console.warn("[PM] product tags failed:", e);
         if (!dead) setTagErr(e.message || String(e));
+      }
+    })();
+    return () => { dead = true; };
+  }, []);
+
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const convs = await fetchConversations();
+        if (dead) return;
+        const numbers = (Array.isArray(convs) ? convs : [])
+          .map(c => String(c.phone || c.customerIdRaw || c.customerId || c.id || "").replace(/\D/g, ""))
+          .filter(Boolean)
+          .slice(0, 50);
+        setRecentTestNumbers([...new Set(numbers)]);
+      } catch (e) {
+        console.warn("[PM] recent conversations failed:", e);
       }
     })();
     return () => { dead = true; };
@@ -334,9 +355,10 @@ export default function ProgrammedMessagesPage() {
       setList(prev => [{ id: saved.id, title: saved.title }, ...prev.filter(x => x.id !== saved.id && x.id !== activeId)]);
 
       const queued = await queueProgrammedMessageTest(saved.id, { phoneNumber: phone });
+      await runProgrammedMessagesNow(true);
       setTestStatus({
         type: "ok",
-        text: `Test queued for ${queued.customer_id}. It is due now; run the PM dispatcher or wait for the next loop tick.`,
+        text: `Test queued and dispatcher triggered for ${queued.customer_id}.`,
       });
     } catch (e) {
       console.error("No se pudo encolar prueba", e);
@@ -596,6 +618,17 @@ export default function ProgrammedMessagesPage() {
 
           <div className="sr-card" style={{ padding: 12, marginTop: 12 }}>
             <label className="sr-label">Manual test WhatsApp number</label>
+            {recentTestNumbers.length > 0 && (
+              <select
+                className="sr-select"
+                value=""
+                onChange={e => e.target.value && setTestPhoneNumber(e.target.value)}
+                style={{ marginBottom: 8 }}
+              >
+                <option value="">Use recent chat number…</option>
+                {recentTestNumbers.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            )}
             <input
               className="sr-pill-input"
               placeholder="Ej. 51999999999"
@@ -609,7 +642,7 @@ export default function ProgrammedMessagesPage() {
               disabled={saving || !testPhoneNumber.trim()}
               onClick={onQueueTest}
             >
-              Queue test now
+              Send test now
             </button>
             {testStatus && (
               <p className="sr-note" style={{ color: testStatus.type === "error" ? "#b91c1c" : "#166534" }}>
@@ -621,7 +654,7 @@ export default function ProgrammedMessagesPage() {
           <p className="sr-note">
             • New messages use the delay above, e.g. 12h after the latest customer message.
             • If that delay lands overnight, the backend moves it to a Lima business-hour slot (08:00–20:00).
-            • Queue test now creates a due test task for the typed number without waiting for the configured delay.
+            • Send test now creates a due test task and triggers the dispatcher immediately, even outside business hours.
           </p>
         </div>
       </aside>
