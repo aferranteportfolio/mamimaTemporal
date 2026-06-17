@@ -94,6 +94,17 @@ function productMatchesProgramState(productState = [], programState) {
   return hasFunnelState(productState, programState);
 }
 
+function programInactivityMs(schedule = {}) {
+  if (schedule?.mode !== 'delayAfterInbound') return INACTIVITY_MS;
+  const delayHours = Number(schedule.delayHours);
+  if (!Number.isFinite(delayHours) || delayHours <= 0) return INACTIVITY_MS;
+
+  // The old global 2h abandonment threshold should not block short test/early
+  // automations. Example: delayHours=0.25 means this program may be queued
+  // after 15 minutes of seller-side inactivity instead of waiting 2 hours.
+  return Math.min(INACTIVITY_MS, delayHours * 60 * 60 * 1000);
+}
+
 export async function dailyQuerryAllStates() {
   await connectDB();
 
@@ -142,7 +153,6 @@ export async function dailyQuerryAllStates() {
     }
 
     const idleMs = nowMs - new Date(latestSentMsg.timestamp).getTime();
-    if (idleMs < INACTIVITY_MS) continue;
 
     let hasRemarketing = false;
     for (const s of state) {
@@ -160,6 +170,7 @@ export async function dailyQuerryAllStates() {
 
     for (const program of programs) {
       if (!productMatchesProgramState(state, program.state)) continue;
+      if (idleMs < programInactivityMs(program.meta?.schedule)) continue;
 
       const selectedTags = cleanTags(program.meta?.targeting?.productTags);
       if (!tagsMatch(productTags, selectedTags)) continue;

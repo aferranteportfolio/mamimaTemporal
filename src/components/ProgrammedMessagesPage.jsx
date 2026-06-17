@@ -528,6 +528,9 @@ export default function ProgrammedMessagesPage() {
               value={String(delayHours)}
               onChange={e => setDelayHours(e.target.value === "custom" ? delayHours : Number(e.target.value))}
             >
+              <option value="0.25">15 minutes after last customer message</option>
+              <option value="0.5">30 minutes after last customer message</option>
+              <option value="1">1 hour after last customer message</option>
               <option value="2">2 hours after last customer message</option>
               <option value="4">4 hours after last customer message</option>
               <option value="6">6 hours after last customer message</option>
@@ -543,7 +546,7 @@ export default function ProgrammedMessagesPage() {
               step="0.25"
               value={delayHours}
               onChange={e => setDelayHours(e.target.value)}
-              aria-label="Custom delay hours after customer message"
+              aria-label="Custom delay hours after customer message, use 0.25 for 15 minutes"
               style={{ marginTop: 8 }}
             />
           </div>
@@ -652,7 +655,7 @@ export default function ProgrammedMessagesPage() {
           </div>
 
           <p className="sr-note">
-            • New messages use the delay above, e.g. 12h after the latest customer message.
+            • New messages use the delay above; 0.25 hours = 15 minutes.
             • If that delay lands overnight, the backend moves it to a Lima business-hour slot (08:00–20:00).
             • Send test now creates a due test task and triggers the dispatcher immediately, even outside business hours.
           </p>
