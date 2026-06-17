@@ -1,5 +1,7 @@
 // server/jobs/time-utils.mjs
 const LIMA_TZ = 'America/Lima';
+const BUSINESS_START_HOUR = 8;
+const BUSINESS_END_HOUR = 20; // exclusive: [08:00, 20:00) Lima
 
 // Get hour in Lima (0–23) for a given Date (UTC)
 export function getLimaHour(date) {
@@ -13,6 +15,29 @@ export function getLimaHour(date) {
   return parseInt(hourStr, 10);
 }
 
+function isLimaBusinessTime(date) {
+  const h = getLimaHour(date);
+  return h >= BUSINESS_START_HOUR && h < BUSINESS_END_HOUR;
+}
+
+function findBusinessTimeAtOrAfter(start, latest, stepMs) {
+  let candidate = new Date(start);
+  for (let i = 0; i < 48 && candidate.getTime() <= latest.getTime(); i++) {
+    if (isLimaBusinessTime(candidate)) return candidate;
+    candidate = new Date(candidate.getTime() + stepMs);
+  }
+  return null;
+}
+
+function findBusinessTimeAtOrBefore(start, earliest, stepMs) {
+  let candidate = new Date(start);
+  for (let i = 0; i < 48 && candidate.getTime() > earliest.getTime(); i++) {
+    if (isLimaBusinessTime(candidate)) return candidate;
+    candidate = new Date(candidate.getTime() - stepMs);
+  }
+  return null;
+}
+
 /**
  * computeSendAt(lastInbound, schedule)
  *
@@ -20,10 +45,10 @@ export function getLimaHour(date) {
  *  - Legacy/no schedule: keep the previous "near 24h" behavior and only pick
  *    a Lima business-hour slot [08:00, 20:00). This preserves existing
  *    programmed messages that do not yet have delayAfterInbound config.
- *  - delayAfterInbound: schedule exactly lastInbound + delayHours, clamped to
- *    lastInbound + 24h - 30min safety. Explicit delays are allowed at 20:00+
- *    because the UI now communicates delay-based scheduling rather than fixed
- *    business-hour slots; the dispatcher still performs the final 24h guard.
+ *  - delayAfterInbound: start from lastInbound + delayHours, then keep it
+ *    within Lima business hours [08:00, 20:00) and inside the safe WhatsApp
+ *    deadline (lastInbound + 24h - 30min). This prevents overnight sends such
+ *    as 02:00 while still honoring the configured delay as closely as possible.
  */
 export function computeSendAt(lastInbound, schedule = null) {
   if (!lastInbound) return null;
@@ -45,7 +70,17 @@ export function computeSendAt(lastInbound, schedule = null) {
 
     // Clamp delays past the safe WhatsApp deadline rather than creating a task
     // that the dispatcher will inevitably reject after the 24h window expires.
-    return requested.getTime() > safeDeadline.getTime() ? safeDeadline : requested;
+    const bounded = requested.getTime() > safeDeadline.getTime() ? safeDeadline : requested;
+
+    if (isLimaBusinessTime(bounded)) return bounded;
+
+    // Prefer the first business slot after the configured delay. If that would
+    // miss the safe WhatsApp deadline, fall back to the latest business slot
+    // before the bounded deadline. This avoids surprise overnight sends.
+    return (
+      findBusinessTimeAtOrAfter(bounded, safeDeadline, STEP_MS) ||
+      findBusinessTimeAtOrBefore(bounded, inboundDate, STEP_MS)
+    );
   }
 
   // Legacy behavior: send as late as possible within the 24h window, but inside
@@ -54,11 +89,10 @@ export function computeSendAt(lastInbound, schedule = null) {
 
   // Max 48 iterations = 24h / 30min → safe
   for (let i = 0; i < 48; i++) {
-    const h = getLimaHour(candidate);
     const afterInbound = candidate.getTime() > inboundDate.getTime();
 
-    // Business hours: [08:00, 20:00)
-    if (afterInbound && h >= 8 && h < 20) {
+    // Business hours: [08:00, 20:00) Lima.
+    if (afterInbound && isLimaBusinessTime(candidate)) {
       return candidate;
     }
 

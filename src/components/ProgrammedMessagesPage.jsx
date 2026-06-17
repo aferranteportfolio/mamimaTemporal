@@ -620,8 +620,8 @@ export default function ProgrammedMessagesPage() {
 
           <p className="sr-note">
             • New messages use the delay above, e.g. 12h after the latest customer message.
+            • If that delay lands overnight, the backend moves it to a Lima business-hour slot (08:00–20:00).
             • Queue test now creates a due test task for the typed number without waiting for the configured delay.
-            • Legacy hour presets are preserved as metadata; the backend still enforces the 24h safety window.
           </p>
         </div>
       </aside>
