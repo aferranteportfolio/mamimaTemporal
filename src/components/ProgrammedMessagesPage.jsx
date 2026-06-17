@@ -145,6 +145,7 @@ export default function ProgrammedMessagesPage() {
     "🍊 *PRECIO FAJA SOLA: S/. 89*\n🍋 *EN PACK CREMA CON FAJA: S/. 119*",
     "*Dónde se ubica?*",
   ]);
+  const [attachments, setAttachments] = useState([[], [], [], [], [], []]);
 
   // Load selected item's meta
   useEffect(() => {
