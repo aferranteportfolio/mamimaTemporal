@@ -355,10 +355,10 @@ export default function ProgrammedMessagesPage() {
       setList(prev => [{ id: saved.id, title: saved.title }, ...prev.filter(x => x.id !== saved.id && x.id !== activeId)]);
 
       const queued = await queueProgrammedMessageTest(saved.id, { phoneNumber: phone });
-      await runProgrammedMessagesNow(true);
+      await runProgrammedMessagesNow(true, queued.taskId);
       setTestStatus({
         type: "ok",
-        text: `Test queued and dispatcher triggered for ${queued.customer_id}.`,
+        text: `Test queued and dispatcher triggered only for ${queued.customer_id}.`,
       });
     } catch (e) {
       console.error("No se pudo encolar prueba", e);

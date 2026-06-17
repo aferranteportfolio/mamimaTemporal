@@ -206,12 +206,14 @@ export async function queueProgrammedMessageTest(id, { phoneNumber, sellerId } =
   return res.json();
 }
 
-export async function runProgrammedMessagesNow(force = false) {
+export async function runProgrammedMessagesNow(force = false, taskId = null) {
   const API_BASE =
     (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/, "")) ||
     (typeof window !== "undefined" && `${location.protocol}//${location.hostname}:3050`) ||
     "";
-  const res = await fetch(`${API_BASE}/admin/pm/run?force=${force ? "true" : "false"}`, {
+  const qs = new URLSearchParams({ force: force ? "true" : "false" });
+  if (taskId) qs.set("taskId", taskId);
+  const res = await fetch(`${API_BASE}/admin/pm/run?${qs.toString()}`, {
     method: "POST",
     headers: { "Accept": "application/json" },
   });

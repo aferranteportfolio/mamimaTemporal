@@ -1385,8 +1385,9 @@ app.get("/admin/pm/pending", async (req, res) => {
 // manual trigger (already have)
 app.post("/admin/pm/run", async (req, res) => {
   const force = String(req.query.force || "").toLowerCase() === "true";
-  await runProgrammedNow(force);
-  res.json({ ok: true, force });
+  const onlyTaskId = req.query.taskId ? String(req.query.taskId) : null;
+  await runProgrammedNow(force, { onlyTaskId });
+  res.json({ ok: true, force, onlyTaskId });
 });
 
 app.get("/__whoami", (req, res) => {

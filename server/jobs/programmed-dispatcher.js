@@ -241,6 +241,7 @@ export async function runProgrammedDispatcher({
   sendText,               // required
   sendMedia = null,       // optional
   onMessageSent = null,   // optional
+  onlyTaskId = null,      // optional: run exactly one queued task, used by manual tests
 } = {}) {
   const t0  = Date.now();
   const now = dayjs();
@@ -274,14 +275,22 @@ export async function runProgrammedDispatcher({
   }
 
   const cutoff = now.subtract(24, "hour").toDate();
-  const query = {
-    sent: false,
-    state_id: { $in: statesOnly },
-    created_at: { $gte: cutoff },
-  };
+  const query = onlyTaskId
+    ? {
+        _id: onlyTaskId,
+        sent: false,
+        state_id: { $in: statesOnly },
+      }
+    : {
+        sent: false,
+        state_id: { $in: statesOnly },
+        created_at: { $gte: cutoff },
+      };
   if (forSellerId) query.sellerId = String(forSellerId);
 
-  // Only process rows whose sendAt is reached, or legacy rows without sendAt
+  // Only process rows whose sendAt is reached, or legacy rows without sendAt.
+  // When onlyTaskId is present, this prevents a manual test run from flushing
+  // every other due programmed-message task in the queue.
   query.$or = [
     { sendAt: { $exists: false } },       // old rows
     { sendAt: { $lte: now.toDate() } },   // due rows

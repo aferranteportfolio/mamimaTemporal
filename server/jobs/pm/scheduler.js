@@ -7,6 +7,7 @@ export const pmStatus = {
   lastTickAt: null,
   lastTickIso: null,
   lastForce: false,
+  lastOnlyTaskId: null,
   lastOk: 0,
   lastFail: 0,
   lastMs: 0,
@@ -16,7 +17,7 @@ export const pmStatus = {
 
 let inFlight = false;
 
-async function tick({ force = false } = {}) {
+async function tick({ force = false, onlyTaskId = null } = {}) {
   if (inFlight) return;
   inFlight = true;
   pmStatus.running = true;
@@ -29,6 +30,7 @@ async function tick({ force = false } = {}) {
   try {
     const res = await runProgrammedDispatcher({
       force,
+      onlyTaskId,
       sendText: sendTextAdapter,
       verbose: true,
     });
@@ -42,6 +44,7 @@ async function tick({ force = false } = {}) {
     pmStatus.lastTickAt  = Date.now();
     pmStatus.lastTickIso = new Date().toISOString();
     pmStatus.lastForce   = force;
+    pmStatus.lastOnlyTaskId = onlyTaskId;
     pmStatus.running     = false;
     inFlight             = false;
 
@@ -68,6 +71,6 @@ export function startProgrammedLoop() {
   scheduleNext();
 }
 
-export async function runProgrammedNow(force = false) {
-  await tick({ force });
+export async function runProgrammedNow(force = false, { onlyTaskId = null } = {}) {
+  await tick({ force, onlyTaskId });
 }
