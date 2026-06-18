@@ -1353,7 +1353,20 @@ export async function sendMediaAdapter(to, fileInfo = {}, sellerId) {
   if (!resp.ok) throw new Error(`Media fetch failed: ${resp.status} ${url}`);
 
   const mime = String(fileInfo.mime || resp.headers.get("content-type") || "application/octet-stream").split(";")[0];
-  const filename = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "programmed-media");
+  const extByMime = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/3gpp": ".3gp",
+    "application/pdf": ".pdf",
+  };
+  const urlName = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "");
+  const baseName = String(fileInfo.name || urlName || "programmed-media");
+  const filename = path.extname(baseName)
+    ? baseName
+    : `${baseName}${extByMime[mime] || ""}`;
   const buffer = Buffer.from(await resp.arrayBuffer());
   const mediaId = await uploadMediaToWhatsApp({ buffer, mimeType: mime, filename });
 

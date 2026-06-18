@@ -184,9 +184,11 @@ async function sendProgramToRow(
         continue;
       }
 
+      const mediaUrl = f.url || f.absUrl;
+      const mediaMime = f.mime || f.mimeType || "";
       const r = await sendMedia(
         row.customer_id,
-        { url: f.url, mime: f.mime, caption: "" },
+        { url: mediaUrl, mime: mediaMime, name: f.name || f.storedName, caption: "" },
         row.sellerId
       );
       const wamid =
@@ -196,16 +198,16 @@ async function sendProgramToRow(
       if (!ok) throw new Error("media not sent (missing wamid)");
 
       const type =
-        f?.mime?.startsWith("image/")
+        mediaMime.startsWith("image/")
           ? "image"
-          : f?.mime?.startsWith("video/")
+          : mediaMime.startsWith("video/")
           ? "video"
-          : f?.mime?.startsWith("audio/")
+          : mediaMime.startsWith("audio/")
           ? "audio"
           : "document";
 
       try {
-        onMessageSent?.({ wamid, to: row.customer_id, type, url: f.url });
+        onMessageSent?.({ wamid, to: row.customer_id, type, url: mediaUrl });
       } catch {
         // swallow onMessageSent errors
       }

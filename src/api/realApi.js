@@ -173,7 +173,9 @@ export async function saveProgrammedMessage({ id, title, messages, misc, schedul
       if (file instanceof File) {
         const cid = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}-${idx}-${i}`;
         fileCids.push(cid);
-        form.append(`file:${cid}`, file, `cid:${cid}`);
+        // Keep the user's filename/extension for WhatsApp media upload.
+        // The cid is already carried by the multipart field name.
+        form.append(`file:${cid}`, file, file.name || `upload-${idx}-${i}`);
       } else if (file?.url || file?.absUrl) {
         files.push({
           url: file.url || file.absUrl,
