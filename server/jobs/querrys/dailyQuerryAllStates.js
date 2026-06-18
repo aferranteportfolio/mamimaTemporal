@@ -179,7 +179,11 @@ export async function dailyQuerryAllStates() {
       if (!sendAt) continue;
 
       const dedupeTags = selectedTags.length ? selectedTags.sort().join('|') : 'all';
-      const dedupeKey = `${program.id}:${program.state}:${customer_id}:${latestSeller}:${dedupeTags}`;
+      // Include the inbound timestamp so a new customer message opens a new
+      // eligible scheduling window. Without this, an older sent/skipped task for
+      // the same program/customer/tag permanently blocks future follow-ups.
+      const inboundKey = lastInboundDate.getTime();
+      const dedupeKey = `${program.id}:${program.state}:${customer_id}:${latestSeller}:${inboundKey}:${dedupeTags}`;
 
       candidates.push({
         program_id: program.id,
