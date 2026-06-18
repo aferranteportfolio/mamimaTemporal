@@ -1392,13 +1392,54 @@ export async function sendMediaAdapter(to, fileInfo = {}, sellerId) {
     : `${baseName}${extByMime[mime] || ""}`;
   const mediaId = await uploadMediaToWhatsApp({ buffer, mimeType: mime, filename });
 
-  if (mime.startsWith("video/")) {
-    return await sendVideoByMediaId(to, mediaId, fileInfo.caption || "");
-  }
-  if (mime.startsWith("image/")) {
-    return await sendImageByMediaId(to, mediaId, fileInfo.caption || "");
-  }
-  return await sendDocumentByMediaId(to, mediaId, filename, fileInfo.caption || "");
+  const caption = String(fileInfo.caption || "");
+  const type = mime.startsWith("video/")
+    ? "video"
+    : mime.startsWith("image/")
+    ? "image"
+    : "document";
+
+  const wamid = type === "video"
+    ? await sendVideoByMediaId(to, mediaId, caption)
+    : type === "image"
+    ? await sendImageByMediaId(to, mediaId, caption)
+    : await sendDocumentByMediaId(to, mediaId, filename, caption);
+
+  const ts = new Date().toISOString();
+  const dbPayload = {
+    id: wamid,
+    from: sellerId || OUR_NUMBER,
+    to,
+    type,
+    mediaId,
+    mimeType: mime,
+    message: caption,
+    caption,
+    timestamp: ts,
+    dir: "out",
+    media: { id: mediaId, mimeType: mime, timestamp: ts },
+  };
+
+  await initializeCostumerAndStoreMessageHistory(dbPayload, 0);
+
+  const chatDoc = await Product.findOne({ customer_id: normalizeCustomerId(to) }, { _id: 1 }).lean();
+  broadcast("outbound_ui", {
+    id: wamid,
+    chatId: chatDoc?._id ? String(chatDoc._id) : null,
+    from: "me",
+    dir: "out",
+    type,
+    text: caption,
+    imageUrl: type === "image" ? `/api/media/${mediaId}` : undefined,
+    videoUrl: type === "video" ? `/api/media/${mediaId}` : undefined,
+    mediaId,
+    timestamp: ts,
+    status: "sent",
+    to,
+    fromPhone: sellerId || OUR_NUMBER,
+  });
+
+  return { ok: true, id: wamid, wamid, mediaId, kind: type };
 }
 
 // Avoid overlapping runs
