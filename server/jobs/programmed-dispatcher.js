@@ -51,6 +51,8 @@ const queueSchema = new mongoose.Schema(
     dedupeKey:   String,
 
     sent:        { type: Boolean, default: false },
+    processing:  { type: Boolean, default: false },
+    processingAt:{ type: Date },
     created_at:  { type: Date, default: Date.now },
   },
   { collection: "message_tasks" }
@@ -163,10 +165,14 @@ async function sendProgramToRow(
     const m     = msgs[i] || {};
     const files = Array.isArray(m.files) ? m.files : [];
 
-    // TEXT
-    if ((m.text || "").trim()) {
-      const t0       = Date.now();
-      const textBody = m.text;
+    const textBody = String(m.text || "");
+
+    // Saved-reply behavior: if a bubble has media, send the bubble text as the
+    // caption of the first media item instead of also sending a separate text
+    // bubble. This avoids duplicated-looking programmed messages and matches
+    // the saved reply composer.
+    if (files.length === 0 && textBody.trim()) {
+      const t0 = Date.now();
 
       const r  = await sendText(row.customer_id, textBody, row.sellerId);
       const ms = Date.now() - t0;
@@ -194,7 +200,8 @@ async function sendProgramToRow(
     }
 
     // MEDIA (optional)
-    for (const f of files) {
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+      const f = files[fileIndex];
       if (!sendMedia) {
         continue;
       }
@@ -203,7 +210,12 @@ async function sendProgramToRow(
       const mediaMime = f.mime || f.mimeType || "";
       const r = await sendMedia(
         row.customer_id,
-        { url: mediaUrl, mime: mediaMime, name: f.name || f.storedName, caption: "" },
+        {
+          url: mediaUrl,
+          mime: mediaMime,
+          name: f.name || f.storedName,
+          caption: fileIndex === 0 ? textBody : "",
+        },
         row.sellerId
       );
       const wamid =
@@ -242,6 +254,7 @@ async function sendProgramToRow(
 
   // only here if all parts succeeded
   row.sent = true;
+  row.processing = false;
   await row.save();
 
   meta.usageCount = (meta.usageCount || 0) + 1;
@@ -322,9 +335,26 @@ export async function runProgrammedDispatcher({
   let ok = 0;
   let fail = 0;
 
-  for (const row of rows) {
+  for (let row of rows) {
+    const staleProcessingCutoff = new Date(Date.now() - 10 * 60 * 1000);
+    const claimed = await Queue.findOneAndUpdate(
+      {
+        _id: row._id,
+        sent: false,
+        $or: [
+          { processing: { $ne: true } },
+          { processingAt: { $lte: staleProcessingCutoff } },
+        ],
+      },
+      { $set: { processing: true, processingAt: new Date() } },
+      { new: true }
+    );
+    if (!claimed) continue;
+    row = claimed;
+
     if (!isBusinessTime(dayjs())) {
       row.sendAt = nextBusinessStart(dayjs());
+      row.processing = false;
       await row.save();
       fail++;
       if (verbose) {
@@ -374,6 +404,7 @@ export async function runProgrammedDispatcher({
           if (verbose) {
           }
           row.sent = true;
+          row.processing = false;
           await row.save();
           fail++;
           continue;
@@ -389,6 +420,8 @@ export async function runProgrammedDispatcher({
       });
       ok++;
     } catch (err) {
+      row.processing = false;
+      await row.save().catch(() => {});
       fail++;
       if (verbose) {
         console.error("[PD] error for row", row._id, err?.message || err);

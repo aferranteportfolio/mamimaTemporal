@@ -9,6 +9,8 @@ const messageTaskSchema = new mongoose.Schema({
   sendAt:     { type: Date,   required: false }, // 👈 new
   created_at: { type: Date,   default: Date.now },
   sent:       { type: Boolean, default: false },
+  processing: { type: Boolean, default: false },
+  processingAt: { type: Date },
   failed:     { type: Boolean, default: false },
   failReason: { type: String },
   productTags: [{ type: String }],

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   saveProgrammedMessage,
   listProgrammedMessages,
@@ -146,6 +146,7 @@ export default function ProgrammedMessagesPage() {
     "*Dónde se ubica?*",
   ]);
   const [attachments, setAttachments] = useState([[], [], [], [], [], []]);
+  const testRunningRef = useRef(false);
 
   // Load selected item's meta
   useEffect(() => {
@@ -386,9 +387,12 @@ export default function ProgrammedMessagesPage() {
   };
 
   const onQueueTest = async () => {
+    if (testRunningRef.current) return;
+    testRunningRef.current = true;
     const phone = String(testPhoneNumber || "").replace(/\D/g, "");
     if (!phone) {
       setTestStatus({ type: "error", text: "Enter a WhatsApp test number first." });
+      testRunningRef.current = false;
       return;
     }
 
@@ -434,6 +438,7 @@ export default function ProgrammedMessagesPage() {
       setTestStatus({ type: "error", text: e.message || String(e) });
     } finally {
       setSaving(false);
+      testRunningRef.current = false;
     }
   };
 
