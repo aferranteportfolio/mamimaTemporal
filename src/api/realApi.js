@@ -263,6 +263,19 @@ export async function getProgrammedMessage(id) {
   if (!r.ok) throw new Error(`GET failed: ${r.status}`);
   return r.json(); // meta.json contents
 }
+
+export async function deleteProgrammedMessage(id) {
+  const API_BASE =
+    (typeof window !== "undefined" && import.meta?.env?.VITE_API_BASE?.replace(/\/+$/,"")) ||
+    (typeof window !== "undefined" && `${location.protocol}//${location.hostname}:3050`) ||
+    "";
+  const res = await fetch(`${API_BASE}/api/programmed-messages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "Accept": "application/json" },
+  });
+  if (!res.ok) throw new Error(`Delete programmed message failed: ${res.status}`);
+  return res.json();
+}
 /**
  * Update an existing saved reply (title/messages text only; no new files here).
  * Matches server PUT /api/saved-replies/:id

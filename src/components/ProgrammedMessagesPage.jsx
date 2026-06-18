@@ -3,6 +3,7 @@ import {
   saveProgrammedMessage,
   listProgrammedMessages,
   getProgrammedMessage,
+  deleteProgrammedMessage,
   queueProgrammedMessageTest,
   runProgrammedMessagesNow,
   listProductTags,
@@ -340,8 +341,17 @@ export default function ProgrammedMessagesPage() {
 
   const onDelete = async (id) => {
     setMenuOpenId(null);
-    setList(prev => prev.filter(x => x.id !== id));
-    if (activeId === id) setActiveId(null);
+    try {
+      await deleteProgrammedMessage(id);
+      setList(prev => prev.filter(x => x.id !== id));
+      if (activeId === id) {
+        setActiveId(null);
+        setCurrentId(null);
+      }
+    } catch (e) {
+      console.error("No se pudo eliminar el mensaje programado", e);
+      setErr(e.message || String(e));
+    }
   };
 
   const onSave = async () => {

@@ -315,10 +315,12 @@ programmedMessagesRouter.put("/:id", upload.any(), async (req, res) => {
 
 // ---------- delete ----------
 programmedMessagesRouter.delete("/:id", async (req, res) => {
-  const dir = path.join(BASE_DIR, req.params.id);
+  const id = String(req.params.id || "");
+  const dir = path.join(BASE_DIR, id);
   try {
     await fs.rm(dir, { recursive: true, force: true });
-    res.json({ ok: true });
+    const deletedTasks = await MessageTask.deleteMany({ program_id: id, sent: false });
+    res.json({ ok: true, deletedTasks: deletedTasks.deletedCount || 0 });
   } catch (e) {
     res.status(404).json({ error: "not_found" });
   }
