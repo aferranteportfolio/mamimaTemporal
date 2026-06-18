@@ -18,6 +18,8 @@ const DEFAULT_TZ = process.env.APP_TZ || "America/Lima";
 const MINUTE_WINDOW = 6;           // kept for reference (shouldRunNow), but no longer used
 const SEND_GAP_MS_IMAGE = 1600;
 const SEND_GAP_MS_TEXT  = 500;
+const BUSINESS_START_HOUR = 8;
+const BUSINESS_END_HOUR = 20; // exclusive: [08:00, 20:00)
 
 // === (optional) mongoose connection event logs ===
 export function installConnectionEventLogs() {
@@ -101,6 +103,19 @@ function shouldRunNow(times = [], now = dayjs()) {
     const diff   = Math.abs(localNow.diff(target, "minute"));
     return diff <= MINUTE_WINDOW;
   });
+}
+
+function isBusinessTime(now = dayjs()) {
+  const localHour = now.tz(DEFAULT_TZ).hour();
+  return localHour >= BUSINESS_START_HOUR && localHour < BUSINESS_END_HOUR;
+}
+
+function nextBusinessStart(now = dayjs()) {
+  const localNow = now.tz(DEFAULT_TZ);
+  const nextLocal = localNow.hour() < BUSINESS_START_HOUR
+    ? localNow.hour(BUSINESS_START_HOUR).minute(0).second(0).millisecond(0)
+    : localNow.add(1, "day").hour(BUSINESS_START_HOUR).minute(0).second(0).millisecond(0);
+  return nextLocal.toDate();
 }
 
 const sleep = (ms) =>
@@ -308,6 +323,16 @@ export async function runProgrammedDispatcher({
   let fail = 0;
 
   for (const row of rows) {
+    if (!isBusinessTime(dayjs())) {
+      row.sendAt = nextBusinessStart(dayjs());
+      await row.save();
+      fail++;
+      if (verbose) {
+        console.warn("[PD] deferred row outside Lima business hours", row._id, "until", row.sendAt);
+      }
+      continue;
+    }
+
     // Prefer the exact programmed message captured when the task was created.
     // Legacy rows created before program_id existed fall back by funnel state.
     const program = row.program_id

@@ -1348,11 +1348,34 @@ export async function sendTextAdapter(to, text, sellerId) {
 export async function sendMediaAdapter(to, fileInfo = {}, sellerId) {
   const url = String(fileInfo.url || "");
   if (!url) throw new Error("Missing media URL");
+  let contentType = "";
+  let buffer = null;
 
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Media fetch failed: ${resp.status} ${url}`);
+  const mediaPathname = (() => {
+    try { return new URL(url).pathname; }
+    catch { return url; }
+  })();
+  if (mediaPathname.startsWith("/programmedmsgs/")) {
+    const mediaRoot = path.resolve(process.cwd(), "programmedmsgs");
+    const relPath = decodeURIComponent(mediaPathname.replace(/^\/programmedmsgs\/?/, ""));
+    const localPath = path.resolve(mediaRoot, relPath);
+    if (localPath.startsWith(`${mediaRoot}${path.sep}`) || localPath === mediaRoot) {
+      try {
+        buffer = await fs.promises.readFile(localPath);
+      } catch {
+        buffer = null;
+      }
+    }
+  }
 
-  const mime = String(fileInfo.mime || resp.headers.get("content-type") || "application/octet-stream").split(";")[0];
+  if (!buffer) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Media fetch failed: ${resp.status} ${url}`);
+    contentType = resp.headers.get("content-type") || "";
+    buffer = Buffer.from(await resp.arrayBuffer());
+  }
+
+  const mime = String(fileInfo.mime || contentType || "application/octet-stream").split(";")[0];
   const extByMime = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -1367,7 +1390,6 @@ export async function sendMediaAdapter(to, fileInfo = {}, sellerId) {
   const filename = path.extname(baseName)
     ? baseName
     : `${baseName}${extByMime[mime] || ""}`;
-  const buffer = Buffer.from(await resp.arrayBuffer());
   const mediaId = await uploadMediaToWhatsApp({ buffer, mimeType: mime, filename });
 
   if (mime.startsWith("video/")) {

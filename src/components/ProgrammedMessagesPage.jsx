@@ -787,7 +787,7 @@ export default function ProgrammedMessagesPage() {
           <p className="sr-note">
             • New messages use the delay above; 0.25 hours = 15 minutes.
             • If that delay lands overnight, the backend moves it to a Lima business-hour slot (08:00–20:00).
-            • Send test now creates a due test task and triggers the dispatcher immediately, even outside business hours.
+            • Send test now creates a due test task, but the dispatcher will defer it until business hours if it is outside 08:00–20:00 Lima time.
           </p>
         </div>
       </aside>

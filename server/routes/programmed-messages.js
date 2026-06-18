@@ -179,7 +179,8 @@ programmedMessagesRouter.post("/:id/test-task", async (req, res) => {
 
     // This is intentionally due immediately so you can test a configured
     // programmed message without waiting 12h/18h. The normal dispatcher still
-    // owns the actual WhatsApp send path and will keep its final 24h guard.
+    // owns the actual WhatsApp send path and keeps its final 24h + business-hour
+    // guards, so tests queued outside 08:00–20:00 Lima are deferred.
     const dedupeKey = `test:${meta.id}:${customerId}:${Date.now()}:${rid(4)}`;
     const task = await MessageTask.create({
       state_id: stateId,
