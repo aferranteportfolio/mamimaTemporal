@@ -129,9 +129,10 @@ function mapInboundToUi(raw) {
     : undefined;
 
   // IMAGE
+  const inboundMediaId = media?.id ?? raw.mediaId ?? null;
   const imageUrl =
-    (type === 'image' && media?.id)
-      ? `/api/media/${media.id}`
+    type === 'image'
+      ? (raw.imageUrl || (inboundMediaId ? `/api/media/${inboundMediaId}` : undefined))
       : undefined;
 
   // AUDIO
@@ -141,8 +142,8 @@ function mapInboundToUi(raw) {
       : undefined;
 
   const fileUrl =
-    (type === 'document' && media?.url)
-      ? media.url
+    type === 'document'
+      ? (raw.fileUrl || raw.documentUrl || media?.url || (inboundMediaId ? `/api/media/${inboundMediaId}` : undefined))
       : undefined;
 
   // LOCATION
@@ -180,7 +181,7 @@ function mapInboundToUi(raw) {
     fileName: type === 'document' ? (media?.filename || media?.name || null) : null,
     location,
     locationUrl,
-    mediaId: media?.id ?? raw.mediaId ?? null,
+    mediaId: inboundMediaId,
     referral_type: referral_type ?? null,
     referral_metadata: referral_metadata ?? null,
   };

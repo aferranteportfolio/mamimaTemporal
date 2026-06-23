@@ -3,20 +3,151 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream";
 
-export function createMediaProxyRouter({ token }) {
+const mask = (value) => {
+  const s = String(value || "");
+  if (!s) return "missing";
+  return `${s.slice(0, 6)}…${s.slice(-4)} (${s.length} chars)`;
+};
+
+const TOKEN_ENV_KEYS = [
+  "WHATSAPP_TOKEN",
+  "WA_TOKEN",
+  "META_ACCESS_TOKEN",
+  "FACEBOOK_ACCESS_TOKEN",
+];
+
+const tokenFromEnv = () => {
+  const key = TOKEN_ENV_KEYS.find((envKey) => !!process.env[envKey]);
+  return {
+    key: key || null,
+    value: key ? process.env[key] : "",
+  };
+};
+
+const resolveToken = (token) => {
+  if (typeof token === "function") {
+    const value = token();
+    return { key: "custom resolver", value: value || "" };
+  }
+  if (token) return { key: "constructor option", value: token };
+  return tokenFromEnv();
+};
+
+const previewBody = (body, max = 500) => {
+  if (!body) return "";
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+};
+
+const parseJsonObject = (text) => {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+const graphMediaDiagnosis = (body) => {
+  const error = body?.error || {};
+  if (error.code === 100 && error.error_subcode === 33) {
+    return {
+      category: "media_not_found_or_not_authorized",
+      likelyCauses: [
+        "The token used by /api/media does not belong to the WhatsApp Business Account/phone number that received this media.",
+        "The token is missing WhatsApp Business messaging/media permissions or was generated for the wrong Meta app/business.",
+        "The media id is not a WhatsApp Cloud API media id for this account, or it was deleted/expired by Meta.",
+      ],
+      nextChecks: [
+        "Confirm WHATSAPP_TOKEN is the same token used for this WhatsApp Cloud API phone number.",
+        "Confirm the webhook phone_number_id in [webhook media] logs matches the token's WhatsApp business/phone setup.",
+        "Use the [media-proxy] request + graph metadata failed logs to compare mediaId, graphVersion, and masked token across failing requests.",
+      ],
+    };
+  }
+
+  if (error.code === 190) {
+    return {
+      category: "invalid_or_expired_token",
+      likelyCauses: ["The WhatsApp/Meta access token is invalid, expired, revoked, or malformed."],
+      nextChecks: ["Regenerate WHATSAPP_TOKEN and restart the backend process so the proxy reads the new value."],
+    };
+  }
+
+  return null;
+};
+
+export function createMediaProxyRouter({ token, graphVersion = process.env.WHATSAPP_GRAPH_VERSION || "v21.0", phoneNumberId = process.env.WHATSAPP_PHONE_ID || "" } = {}) {
   const router = express.Router();
+
+  router.get("/_debug/config", (req, res) => {
+    const active = resolveToken(token);
+    return res.json({
+      ok: true,
+      graphVersion,
+      phoneNumberId: phoneNumberId || null,
+      tokenSource: active.key,
+      hasToken: !!active.value,
+      token: mask(active.value),
+      checkedEnvKeys: TOKEN_ENV_KEYS,
+    });
+  });
 
   router.get("/:id", async (req, res) => {
     const id = req.params.id;
+    const active = resolveToken(token);
+    const activeToken = active.value;
+    const startedAt = Date.now();
+
+    console.log("[media-proxy] request", {
+      id,
+      graphVersion,
+      hasToken: !!activeToken,
+      tokenSource: active.key,
+      token: mask(activeToken),
+      phoneNumberId: phoneNumberId || null,
+      accept: req.get("accept") || null,
+      referer: req.get("referer") || null,
+    });
+
+    if (!activeToken) {
+      console.error("[media-proxy] missing token; set WHATSAPP_TOKEN (or WA_TOKEN/META_ACCESS_TOKEN/FACEBOOK_ACCESS_TOKEN)", { id });
+      return res.status(500).json({ ok: false, error: "Missing WhatsApp media token on server" });
+    }
 
     try {
       // 1) Resolve media URL
-      const metaResp = await fetch(`https://graph.facebook.com/v21.0/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const metaUrl = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(id)}`;
+      const metaResp = await fetch(metaUrl, {
+        headers: { Authorization: `Bearer ${activeToken}` }
       });
-      const metaJson = await metaResp.json().catch(() => ({}));
+      const metaText = await metaResp.text().catch(() => "");
+      const metaJson = parseJsonObject(metaText);
+      console.log("[media-proxy] graph metadata response", {
+        id,
+        status: metaResp.status,
+        ok: metaResp.ok,
+        contentType: metaResp.headers.get("content-type"),
+        hasUrl: !!metaJson?.url,
+        mimeType: metaJson?.mime_type || null,
+      });
       if (!metaResp.ok) {
-        return res.status(metaResp.status).json(metaJson);
+        const diagnosis = graphMediaDiagnosis(metaJson);
+        console.error("[media-proxy] graph metadata failed", {
+          id,
+          status: metaResp.status,
+          body: previewBody(metaJson || metaText),
+          diagnosis,
+        });
+        return res.status(metaResp.status).json({
+          ...(metaJson || { error: metaText || "Graph metadata failed" }),
+          ok: false,
+          mediaProxyDiagnosis: diagnosis,
+        });
+      }
+      if (!metaJson) {
+        console.error("[media-proxy] graph metadata was not JSON", { id, status: metaResp.status, body: previewBody(metaText) });
+        return res.status(502).json({ ok: false, error: "Graph metadata response was not JSON" });
       }
       const mediaUrl = metaJson?.url;
       if (!mediaUrl) {
@@ -26,7 +157,7 @@ export function createMediaProxyRouter({ token }) {
       // 2) Fetch media with abort support
       const ac = new AbortController();
       const mediaResp = await fetch(mediaUrl, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${activeToken}` },
         signal: ac.signal
       });
 
@@ -35,8 +166,18 @@ export function createMediaProxyRouter({ token }) {
         ac.abort(); // <- don't call mediaResp.body.cancel(); stream is locked later
       });
 
+      console.log("[media-proxy] media bytes response", {
+        id,
+        status: mediaResp.status,
+        ok: mediaResp.ok,
+        contentType: mediaResp.headers.get("content-type"),
+        contentLength: mediaResp.headers.get("content-length"),
+        elapsedMs: Date.now() - startedAt,
+      });
+
       if (!mediaResp.ok) {
         const txt = await mediaResp.text().catch(() => "");
+        console.error("[media-proxy] media fetch failed", { id, status: mediaResp.status, body: previewBody(txt) });
         return res
           .status(mediaResp.status)
           .type("text/plain")
@@ -63,6 +204,7 @@ export function createMediaProxyRouter({ token }) {
         try { if (!res.writableEnded) res.end(); } catch {}
       });
     } catch (err) {
+      console.error("[media-proxy] unexpected error", { id, error: err?.message || String(err), stack: err?.stack });
       // If headers not sent, respond with JSON; otherwise just end
       if (!res.headersSent) {
         return res.status(500).json({ ok: false, error: String(err?.message || err) });

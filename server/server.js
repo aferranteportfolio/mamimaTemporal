@@ -286,9 +286,33 @@ function extractSimpleMessages(body) {
             : null,
         };
 
-        // Attach media block if applicable
+        // Attach media block if applicable. Keep the media id at the top level too
+        // because several UI/history paths read `mediaId` directly, and inbound
+        // image messages often have no text/caption to fall back on.
         const media = pickMedia(m);
-        if (media) normalized.media = media;
+        if (media) {
+          console.log("[webhook media] inbound media normalized", {
+            wamid: m?.id || null,
+            from: safeDigits(m?.from) || null,
+            to,
+            phoneNumberId: toPhoneId,
+            type,
+            mediaKind: media.kind,
+            mediaId: media.id || null,
+            mimeType: media.mimeType || null,
+            hasCaption: !!media.caption,
+          });
+          normalized.media = media;
+          normalized.mediaId = media.id || null;
+          normalized.mimeType = media.mimeType || null;
+          if (media.id) {
+            const proxyUrl = `/api/media/${media.id}`;
+            if (media.kind === "image") normalized.imageUrl = proxyUrl;
+            if (media.kind === "video") normalized.videoUrl = proxyUrl;
+            if (media.kind === "audio") normalized.audioUrl = proxyUrl;
+            if (media.kind === "document") normalized.documentUrl = proxyUrl;
+          }
+        }
 
         // Optional: capture location payloads
         if (type === 'location' && m?.location) {
@@ -1021,7 +1045,8 @@ if (audioMsgs.length) {
 import { createMediaProxyRouter } from './wa/media-proxy.js';
 
 app.use('/api/media', createMediaProxyRouter({
-  token: process.env.WHATSAPP_TOKEN
+  graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
+  phoneNumberId: process.env.WHATSAPP_PHONE_ID || ''
 }));
 console.log('✅ Media proxy mounted at /api/media/:id');
 

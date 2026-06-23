@@ -353,6 +353,7 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
   const $set = { lastMsgSeq: nextSeq, updatedAt: now() };
   const $inc = {};
   const update = { $set, $inc };
+  let updateQuery = { _id: doc._id };
 
   // Build payloads (only for the side we’re handling)
   let inPayload  = null;
@@ -364,8 +365,13 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
     // keep counter if you use it
     if (typeof before.unreadCount === 'number') $inc.unreadCount = 1;
 
-    // push inbound into customer_messages
+    // push inbound into customer_messages.  Meta can retry webhooks and the
+    // same WhatsApp message can also arrive through multiple server listeners;
+    // make the write idempotent by wamid so customer messages do not appear twice.
     update.$push = { customer_messages: inPayload };
+    if (inPayload.id) {
+      updateQuery = { _id: doc._id, "customer_messages.id": { $ne: inPayload.id } };
+    }
 
   }
 
@@ -450,7 +456,7 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
 
   // Execute atomic update
   const messageUpdateStartedAt = nowMs();
-  const result = await Product.updateOne({ _id: doc._id }, update);
+  const result = await Product.updateOne(updateQuery, update);
   emitObs("db.message_history.atomic_update", {
     productId: String(doc?._id || ""),
     mode,
