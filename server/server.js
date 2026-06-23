@@ -1045,8 +1045,8 @@ if (audioMsgs.length) {
 import { createMediaProxyRouter } from './wa/media-proxy.js';
 
 app.use('/api/media', createMediaProxyRouter({
-  token: () => process.env.WHATSAPP_TOKEN || process.env.WA_TOKEN || process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_ACCESS_TOKEN,
-  graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0'
+  graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
+  phoneNumberId: process.env.WHATSAPP_PHONE_ID || ''
 }));
 console.log('✅ Media proxy mounted at /api/media/:id');
 

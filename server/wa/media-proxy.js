@@ -9,13 +9,29 @@ const mask = (value) => {
   return `${s.slice(0, 6)}…${s.slice(-4)} (${s.length} chars)`;
 };
 
-const tokenFromEnv = () => (
-  process.env.WHATSAPP_TOKEN ||
-  process.env.WA_TOKEN ||
-  process.env.META_ACCESS_TOKEN ||
-  process.env.FACEBOOK_ACCESS_TOKEN ||
-  ""
-);
+const TOKEN_ENV_KEYS = [
+  "WHATSAPP_TOKEN",
+  "WA_TOKEN",
+  "META_ACCESS_TOKEN",
+  "FACEBOOK_ACCESS_TOKEN",
+];
+
+const tokenFromEnv = () => {
+  const key = TOKEN_ENV_KEYS.find((envKey) => !!process.env[envKey]);
+  return {
+    key: key || null,
+    value: key ? process.env[key] : "",
+  };
+};
+
+const resolveToken = (token) => {
+  if (typeof token === "function") {
+    const value = token();
+    return { key: "custom resolver", value: value || "" };
+  }
+  if (token) return { key: "constructor option", value: token };
+  return tokenFromEnv();
+};
 
 const previewBody = (body, max = 500) => {
   if (!body) return "";
@@ -61,19 +77,35 @@ const graphMediaDiagnosis = (body) => {
   return null;
 };
 
-export function createMediaProxyRouter({ token, graphVersion = process.env.WHATSAPP_GRAPH_VERSION || "v21.0" } = {}) {
+export function createMediaProxyRouter({ token, graphVersion = process.env.WHATSAPP_GRAPH_VERSION || "v21.0", phoneNumberId = process.env.WHATSAPP_PHONE_ID || "" } = {}) {
   const router = express.Router();
+
+  router.get("/_debug/config", (req, res) => {
+    const active = resolveToken(token);
+    return res.json({
+      ok: true,
+      graphVersion,
+      phoneNumberId: phoneNumberId || null,
+      tokenSource: active.key,
+      hasToken: !!active.value,
+      token: mask(active.value),
+      checkedEnvKeys: TOKEN_ENV_KEYS,
+    });
+  });
 
   router.get("/:id", async (req, res) => {
     const id = req.params.id;
-    const activeToken = typeof token === "function" ? token() : (token || tokenFromEnv());
+    const active = resolveToken(token);
+    const activeToken = active.value;
     const startedAt = Date.now();
 
     console.log("[media-proxy] request", {
       id,
       graphVersion,
       hasToken: !!activeToken,
+      tokenSource: active.key,
       token: mask(activeToken),
+      phoneNumberId: phoneNumberId || null,
       accept: req.get("accept") || null,
       referer: req.get("referer") || null,
     });
