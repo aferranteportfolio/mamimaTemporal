@@ -51,7 +51,23 @@ export function installSse(app) {
     // Send one normalized inbound event. Sending both raw `inbound` and
     // `inbound_ui` caused duplicate UI handling and made media rendering depend
     // on which event arrived first.
-    const onInbound  = (p) => send('inbound_ui', normalizeInboundForUi(p));
+    const onInbound  = (p) => {
+      const normalized = normalizeInboundForUi(p);
+      if (normalized.mediaId || normalized.type !== "text") {
+        console.log("[sse media] inbound_ui emit", {
+          id: normalized.id || normalized.messageId || null,
+          chatId: normalized.chatId || null,
+          from: normalized.from || null,
+          type: normalized.type,
+          mediaId: normalized.mediaId || null,
+          imageUrl: normalized.imageUrl || null,
+          videoUrl: normalized.videoUrl || null,
+          audioUrl: normalized.audioUrl || null,
+          fileUrl: normalized.fileUrl || null,
+        });
+      }
+      send('inbound_ui', normalized);
+    };
     const onOutbound = (p) => { send('outbound_ui', p); send('outbound', p); };
 
     waEvents.on('inbound', onInbound);

@@ -291,6 +291,17 @@ function extractSimpleMessages(body) {
         // image messages often have no text/caption to fall back on.
         const media = pickMedia(m);
         if (media) {
+          console.log("[webhook media] inbound media normalized", {
+            wamid: m?.id || null,
+            from: safeDigits(m?.from) || null,
+            to,
+            phoneNumberId: toPhoneId,
+            type,
+            mediaKind: media.kind,
+            mediaId: media.id || null,
+            mimeType: media.mimeType || null,
+            hasCaption: !!media.caption,
+          });
           normalized.media = media;
           normalized.mediaId = media.id || null;
           normalized.mimeType = media.mimeType || null;
@@ -1034,7 +1045,8 @@ if (audioMsgs.length) {
 import { createMediaProxyRouter } from './wa/media-proxy.js';
 
 app.use('/api/media', createMediaProxyRouter({
-  token: process.env.WHATSAPP_TOKEN
+  token: () => process.env.WHATSAPP_TOKEN || process.env.WA_TOKEN || process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_ACCESS_TOKEN,
+  graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0'
 }));
 console.log('✅ Media proxy mounted at /api/media/:id');
 

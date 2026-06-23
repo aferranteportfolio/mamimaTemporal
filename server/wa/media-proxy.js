@@ -3,20 +3,84 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream";
 
-export function createMediaProxyRouter({ token }) {
+const mask = (value) => {
+  const s = String(value || "");
+  if (!s) return "missing";
+  return `${s.slice(0, 6)}…${s.slice(-4)} (${s.length} chars)`;
+};
+
+const tokenFromEnv = () => (
+  process.env.WHATSAPP_TOKEN ||
+  process.env.WA_TOKEN ||
+  process.env.META_ACCESS_TOKEN ||
+  process.env.FACEBOOK_ACCESS_TOKEN ||
+  ""
+);
+
+const previewBody = (body, max = 500) => {
+  if (!body) return "";
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+};
+
+const parseJsonObject = (text) => {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+export function createMediaProxyRouter({ token, graphVersion = process.env.WHATSAPP_GRAPH_VERSION || "v21.0" } = {}) {
   const router = express.Router();
 
   router.get("/:id", async (req, res) => {
     const id = req.params.id;
+    const activeToken = typeof token === "function" ? token() : (token || tokenFromEnv());
+    const startedAt = Date.now();
+
+    console.log("[media-proxy] request", {
+      id,
+      graphVersion,
+      hasToken: !!activeToken,
+      token: mask(activeToken),
+      accept: req.get("accept") || null,
+      referer: req.get("referer") || null,
+    });
+
+    if (!activeToken) {
+      console.error("[media-proxy] missing token; set WHATSAPP_TOKEN (or WA_TOKEN/META_ACCESS_TOKEN/FACEBOOK_ACCESS_TOKEN)", { id });
+      return res.status(500).json({ ok: false, error: "Missing WhatsApp media token on server" });
+    }
 
     try {
       // 1) Resolve media URL
-      const metaResp = await fetch(`https://graph.facebook.com/v21.0/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const metaUrl = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(id)}`;
+      const metaResp = await fetch(metaUrl, {
+        headers: { Authorization: `Bearer ${activeToken}` }
       });
-      const metaJson = await metaResp.json().catch(() => ({}));
+      const metaText = await metaResp.text().catch(() => "");
+      const metaJson = parseJsonObject(metaText);
+      console.log("[media-proxy] graph metadata response", {
+        id,
+        status: metaResp.status,
+        ok: metaResp.ok,
+        contentType: metaResp.headers.get("content-type"),
+        hasUrl: !!metaJson?.url,
+        mimeType: metaJson?.mime_type || null,
+      });
       if (!metaResp.ok) {
-        return res.status(metaResp.status).json(metaJson);
+        console.error("[media-proxy] graph metadata failed", {
+          id,
+          status: metaResp.status,
+          body: previewBody(metaJson || metaText),
+        });
+        return res.status(metaResp.status).json(metaJson || { ok: false, error: metaText || "Graph metadata failed" });
+      }
+      if (!metaJson) {
+        console.error("[media-proxy] graph metadata was not JSON", { id, status: metaResp.status, body: previewBody(metaText) });
+        return res.status(502).json({ ok: false, error: "Graph metadata response was not JSON" });
       }
       const mediaUrl = metaJson?.url;
       if (!mediaUrl) {
@@ -26,7 +90,7 @@ export function createMediaProxyRouter({ token }) {
       // 2) Fetch media with abort support
       const ac = new AbortController();
       const mediaResp = await fetch(mediaUrl, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${activeToken}` },
         signal: ac.signal
       });
 
@@ -35,8 +99,18 @@ export function createMediaProxyRouter({ token }) {
         ac.abort(); // <- don't call mediaResp.body.cancel(); stream is locked later
       });
 
+      console.log("[media-proxy] media bytes response", {
+        id,
+        status: mediaResp.status,
+        ok: mediaResp.ok,
+        contentType: mediaResp.headers.get("content-type"),
+        contentLength: mediaResp.headers.get("content-length"),
+        elapsedMs: Date.now() - startedAt,
+      });
+
       if (!mediaResp.ok) {
         const txt = await mediaResp.text().catch(() => "");
+        console.error("[media-proxy] media fetch failed", { id, status: mediaResp.status, body: previewBody(txt) });
         return res
           .status(mediaResp.status)
           .type("text/plain")
@@ -63,6 +137,7 @@ export function createMediaProxyRouter({ token }) {
         try { if (!res.writableEnded) res.end(); } catch {}
       });
     } catch (err) {
+      console.error("[media-proxy] unexpected error", { id, error: err?.message || String(err), stack: err?.stack });
       // If headers not sent, respond with JSON; otherwise just end
       if (!res.headersSent) {
         return res.status(500).json({ ok: false, error: String(err?.message || err) });
