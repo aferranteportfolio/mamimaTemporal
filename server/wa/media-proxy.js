@@ -32,6 +32,35 @@ const parseJsonObject = (text) => {
   }
 };
 
+const graphMediaDiagnosis = (body) => {
+  const error = body?.error || {};
+  if (error.code === 100 && error.error_subcode === 33) {
+    return {
+      category: "media_not_found_or_not_authorized",
+      likelyCauses: [
+        "The token used by /api/media does not belong to the WhatsApp Business Account/phone number that received this media.",
+        "The token is missing WhatsApp Business messaging/media permissions or was generated for the wrong Meta app/business.",
+        "The media id is not a WhatsApp Cloud API media id for this account, or it was deleted/expired by Meta.",
+      ],
+      nextChecks: [
+        "Confirm WHATSAPP_TOKEN is the same token used for this WhatsApp Cloud API phone number.",
+        "Confirm the webhook phone_number_id in [webhook media] logs matches the token's WhatsApp business/phone setup.",
+        "Use the [media-proxy] request + graph metadata failed logs to compare mediaId, graphVersion, and masked token across failing requests.",
+      ],
+    };
+  }
+
+  if (error.code === 190) {
+    return {
+      category: "invalid_or_expired_token",
+      likelyCauses: ["The WhatsApp/Meta access token is invalid, expired, revoked, or malformed."],
+      nextChecks: ["Regenerate WHATSAPP_TOKEN and restart the backend process so the proxy reads the new value."],
+    };
+  }
+
+  return null;
+};
+
 export function createMediaProxyRouter({ token, graphVersion = process.env.WHATSAPP_GRAPH_VERSION || "v21.0" } = {}) {
   const router = express.Router();
 
@@ -71,12 +100,18 @@ export function createMediaProxyRouter({ token, graphVersion = process.env.WHATS
         mimeType: metaJson?.mime_type || null,
       });
       if (!metaResp.ok) {
+        const diagnosis = graphMediaDiagnosis(metaJson);
         console.error("[media-proxy] graph metadata failed", {
           id,
           status: metaResp.status,
           body: previewBody(metaJson || metaText),
+          diagnosis,
         });
-        return res.status(metaResp.status).json(metaJson || { ok: false, error: metaText || "Graph metadata failed" });
+        return res.status(metaResp.status).json({
+          ...(metaJson || { error: metaText || "Graph metadata failed" }),
+          ok: false,
+          mediaProxyDiagnosis: diagnosis,
+        });
       }
       if (!metaJson) {
         console.error("[media-proxy] graph metadata was not JSON", { id, status: metaResp.status, body: previewBody(metaText) });
