@@ -33,6 +33,9 @@ const ChatMessageSchema = new mongoose.Schema(
     media: {
       id:       { type: String },
       mimeType: { type: String },
+      kind:     { type: String },
+      caption:  { type: String },
+      filename: { type: String },
       size:     { type: Number },
       sha256:   { type: String },
       durationMs:{ type: Number },
