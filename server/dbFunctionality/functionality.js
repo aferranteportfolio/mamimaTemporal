@@ -324,6 +324,40 @@ function buildOutboundMsg(src, ourNumber) {
   };
 }
 
+function dateKey(value) {
+  const time = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function sameMessageFingerprint(a, b) {
+  if (!a || !b) return false;
+  const aTs = dateKey(a.timestamp);
+  const bTs = dateKey(b.timestamp);
+  return !!(
+    aTs &&
+    bTs &&
+    aTs === bTs &&
+    String(a.type || "text") === String(b.type || "text") &&
+    String(a.message || "") === String(b.message || "")
+  );
+}
+
+function findDuplicateMessage(messages, payload) {
+  if (!Array.isArray(messages) || !payload) return null;
+
+  if (payload.id) {
+    const byId = messages.find((m) => m?.id === payload.id);
+    if (byId) return byId;
+  }
+
+  if (payload.outboxId) {
+    const byOutboxId = messages.find((m) => m?.outboxId === payload.outboxId);
+    if (byOutboxId) return byOutboxId;
+  }
+
+  return messages.find((m) => sameMessageFingerprint(m, payload)) || null;
+}
+
 
 
 export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ourNumber) {
@@ -360,6 +394,18 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
 
   if (isInbound) {
     inPayload = buildInboundMsg(inboundMsg);
+
+    const duplicateInbound = findDuplicateMessage(fresh?.customer_messages, inPayload);
+    if (duplicateInbound) {
+      emitObs("db.message_history.duplicate_skipped", {
+        productId: String(doc?._id || ""),
+        mode,
+        path: "customer_messages",
+        messageId: inPayload?.id ?? null,
+      });
+      return true;
+    }
+
     $set.lastInboundTs = inPayload.timestamp;
     // keep counter if you use it
     if (typeof before.unreadCount === 'number') $inc.unreadCount = 1;
@@ -371,6 +417,24 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
 
  if (isOutbound) {
   outPayload = buildOutboundMsg(outboundMsg, ourNumber);
+
+  const sentMessages = fresh?.state?.[0]?.messagesSentCollection || [];
+  const duplicateOutbound = findDuplicateMessage(sentMessages, outPayload);
+  const shouldSkipDuplicate =
+    duplicateOutbound &&
+    (!outPayload.outboxId || duplicateOutbound.outboxId === outPayload.outboxId) &&
+    (!outPayload.id || duplicateOutbound.id === outPayload.id);
+
+  if (shouldSkipDuplicate) {
+    emitObs("db.message_history.duplicate_skipped", {
+      productId: String(doc?._id || ""),
+      mode,
+      path: "state.0.messagesSentCollection",
+      outboxId: outPayload?.outboxId ?? null,
+      messageId: outPayload?.id ?? null,
+    });
+    return true;
+  }
 
   // ✅ If this is the "accepted" update (wamid arrived) and we have outboxId,
   // try to UPDATE the queued placeholder instead of pushing a new element.
