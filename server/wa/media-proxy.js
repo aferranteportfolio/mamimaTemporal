@@ -3,20 +3,60 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream";
 
+function graphErrorSummary(body = {}) {
+  const err = body?.error || {};
+  return {
+    message: err.message || "Graph API media metadata request failed",
+    type: err.type || null,
+    code: err.code || null,
+    subcode: err.error_subcode || null,
+    fbtraceId: err.fbtrace_id || null,
+  };
+}
+
+function isUnsupportedGraphObject(body = {}) {
+  const err = body?.error || {};
+  return err.code === 100 && err.error_subcode === 33;
+}
+
 export function createMediaProxyRouter({ token }) {
   const router = express.Router();
 
   router.get("/:id", async (req, res) => {
     const id = req.params.id;
 
+    if (!token) {
+      return res.status(500).json({
+        ok: false,
+        error: "WHATSAPP_TOKEN is not configured; cannot fetch WhatsApp media.",
+      });
+    }
+
     try {
-      // 1) Resolve media URL
+      // 1) Resolve WhatsApp media URL. This endpoint only works with real WhatsApp
+      // media IDs from inbound media messages, using a token that has access to the
+      // same WhatsApp Business Account. It does not work for wamid message IDs,
+      // Meta ad IDs, or media that belongs to another/expired business context.
       const metaResp = await fetch(`https://graph.facebook.com/v21.0/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const metaJson = await metaResp.json().catch(() => ({}));
       if (!metaResp.ok) {
-        return res.status(metaResp.status).json(metaJson);
+        const summary = graphErrorSummary(metaJson);
+        const status = isUnsupportedGraphObject(metaJson) ? 404 : metaResp.status;
+
+        console.warn("[media-proxy] graph metadata failed", {
+          id,
+          status: metaResp.status,
+          ...summary,
+        });
+
+        return res.status(status).json({
+          ok: false,
+          error: summary.message,
+          graph: summary,
+          hint: "Use /api/media/:id only with WhatsApp media IDs from inbound media messages, not wamid IDs, ad IDs, or expired/inaccessible media.",
+        });
       }
       const mediaUrl = metaJson?.url;
       if (!mediaUrl) {

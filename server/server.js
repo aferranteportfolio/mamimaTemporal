@@ -620,8 +620,7 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
 const WA_DEBUG = String(process.env.WA_DEBUG ?? "0") === "1";
 
-// 1) VERIFICACIÓN (GET)
-app.get("/wa/webhook", (req, res) => {
+function verifyWhatsAppWebhook(req, res) {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
@@ -630,13 +629,28 @@ app.get("/wa/webhook", (req, res) => {
     // ✔️ responder SOLO el challenge con 200
     return res.status(200).send(challenge);
   }
+
+  // If someone opens the ngrok base URL in a browser, show the exact Meta URL to use
+  // instead of returning a confusing 404. Meta verification requests still get 403
+  // when the verify token is wrong.
+  if (!mode && req.path === "/") {
+    return res.status(200).type("text/plain").send(
+      "WhatsApp webhook server is online. Configure Meta Callback URL with " +
+        `${req.protocol}://${req.get("host")}/wa/webhook`
+    );
+  }
+
   // ❌ token incorrecto
   return res.sendStatus(403);
-});
+}
+
+// 1) VERIFICACIÓN (GET)
+// Prefer /wa/webhook. The root alias helps when the ngrok base URL is pasted by mistake.
+app.get(["/wa/webhook", "/"], verifyWhatsAppWebhook);
 
 // 2) RECEPCIÓN DE MENSAJES (POST)
 app.post(
-  "/wa/webhook",
+  ["/wa/webhook", "/"],
   express.raw({ type: "*/*", limit: "5mb" }),
   (req, res) => {
     // ✅ ACK FAST (Meta no reintenta)
