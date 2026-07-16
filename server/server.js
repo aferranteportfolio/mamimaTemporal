@@ -547,8 +547,26 @@ const buildMediaUrl = (m) => {
   });
 
   const all = [...inbound, ...outbound];
-  all.sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
-  return all;
+  const unique = [];
+  const seen = new Set();
+
+  for (const message of all) {
+    const exactId = message.waId || (String(message.id || "").startsWith("wamid.") ? message.id : null);
+    const fallbackKey = [
+      message.dir || message.from || "",
+      message.type || "text",
+      message.text || "",
+      message.timestamp || "",
+    ].join("|");
+    const key = exactId || fallbackKey;
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(message);
+  }
+
+  unique.sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
+  return unique;
 }
 
 

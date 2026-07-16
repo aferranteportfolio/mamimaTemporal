@@ -358,6 +358,39 @@ function findDuplicateMessage(messages, payload) {
   return messages.find((m) => sameMessageFingerprint(m, payload)) || null;
 }
 
+function duplicateMatchClauses(path, payload) {
+  const clauses = [];
+
+  if (payload?.id) {
+    clauses.push({ [path]: { $not: { $elemMatch: { id: payload.id } } } });
+  }
+
+  if (payload?.outboxId) {
+    clauses.push({ [path]: { $not: { $elemMatch: { outboxId: payload.outboxId } } } });
+  }
+
+  if (payload?.timestamp) {
+    clauses.push({
+      [path]: {
+        $not: {
+          $elemMatch: {
+            type: payload.type || "text",
+            message: payload.message || "",
+            timestamp: payload.timestamp,
+          },
+        },
+      },
+    });
+  }
+
+  return clauses;
+}
+
+function withDuplicateGuard(baseQuery, path, payload) {
+  const clauses = duplicateMatchClauses(path, payload);
+  return clauses.length ? { ...baseQuery, $and: clauses } : baseQuery;
+}
+
 
 
 export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ourNumber) {
@@ -501,7 +534,10 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
   }
 
   const outboundPushStartedAt = nowMs();
-  await Product.updateOne({ _id: doc._id }, update);
+  const outboundQuery = before.hasState0
+    ? withDuplicateGuard({ _id: doc._id }, "state.0.messagesSentCollection", outPayload)
+    : { _id: doc._id };
+  const outboundResult = await Product.updateOne(outboundQuery, update);
   emitObs("db.message_history.outbound_update", {
     productId: String(doc?._id || ""),
     outboxId: outPayload?.outboxId ?? null,
@@ -509,12 +545,17 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
     outboundUpdateMs: durationMs(outboundPushStartedAt),
     hasState0: before.hasState0,
     path: before.hasState0 ? "push_existing_state" : "create_state",
+    modifiedCount: outboundResult.modifiedCount ?? outboundResult.nModified ?? 0,
   });
+  return true;
 }
 
   // Execute atomic update
   const messageUpdateStartedAt = nowMs();
-  const result = await Product.updateOne({ _id: doc._id }, update);
+  const updateQuery = isInbound
+    ? withDuplicateGuard({ _id: doc._id }, "customer_messages", inPayload)
+    : { _id: doc._id };
+  const result = await Product.updateOne(updateQuery, update);
   emitObs("db.message_history.atomic_update", {
     productId: String(doc?._id || ""),
     mode,
