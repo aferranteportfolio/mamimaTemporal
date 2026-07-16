@@ -404,7 +404,7 @@ useEffect(() => {
       raw.location ||
       raw.locationUrl
     );
-    const isStatusOnly = Boolean(raw.status && raw.raw && !hasRenderablePayload);
+    const isStatusOnly = Boolean(raw.status && !outboxId && !hasRenderablePayload);
 
     let convId = raw.chatId || null;
     if (!convId && raw.to) {

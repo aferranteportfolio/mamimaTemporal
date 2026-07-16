@@ -164,8 +164,21 @@ const replyToWaId =
     };
   };
   
+  const hasRenderableMessage = (message) => {
+    const type = String(message?.type || "text").toLowerCase();
+    const text = String(message?.text || message?.message || "").trim();
+    if (text) return true;
+    if (type === "location") return !!(message?.location || message?.locationUrl || message?.url);
+    if (["image", "video", "audio", "document", "file"].includes(type)) {
+      return !!(message?.imageUrl || message?.videoUrl || message?.audioUrl || message?.fileUrl || message?.url || message?.mediaId || message?.media?.id);
+    }
+    if (type === "ctwa_referral") return !!message?.referral_metadata;
+    return false;
+  };
+
   const uiMessages = useMemo(() => {
     const base = (messages || [])
+      .filter(hasRenderableMessage)
       .slice()
       .sort((a, b) => {
         const ta =

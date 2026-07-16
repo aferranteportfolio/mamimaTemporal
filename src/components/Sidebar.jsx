@@ -48,6 +48,18 @@ const normCompact = (s) =>
     .normalize("NFD").replace(/\p{Diacritic}/gu, "")
     .replace(/\s+/g, "");
 
+const hasRenderableMessage = (message) => {
+  const type = String(message?.type || "text").toLowerCase();
+  const text = String(message?.text || message?.message || "").trim();
+  if (text) return true;
+  if (type === "location") return !!(message?.location || message?.locationUrl || message?.url);
+  if (["image", "video", "audio", "document", "file"].includes(type)) {
+    return !!(message?.imageUrl || message?.videoUrl || message?.audioUrl || message?.fileUrl || message?.url || message?.mediaId || message?.media?.id);
+  }
+  if (type === "ctwa_referral") return !!message?.referral_metadata;
+  return false;
+};
+
 export default function Sidebar({
   conversations,
   messagesByChat = {},
@@ -61,7 +73,7 @@ export default function Sidebar({
   const enriquecidas = useMemo(() => {
     const out = (conversations || []).map((c) => {
       const live = messagesByChat[c.id] || [];
-      const lastLive = live.length ? live[live.length - 1] : null;
+      const lastLive = [...live].reverse().find(hasRenderableMessage) || null;
 
       const previewText = lastLive?.text ?? c.lastMessage ?? "";
       const previewTs   = toTs(lastLive?.ts ?? c.lastTimestamp ?? 0);
