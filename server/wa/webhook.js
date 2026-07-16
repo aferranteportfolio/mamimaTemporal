@@ -58,7 +58,32 @@ function getInboundMedia(m) {
     };
   }
 
+  if (m.type === "sticker" && m.sticker?.id) {
+    return {
+      kind: "sticker",
+      id: m.sticker.id,
+      mimeType: m.sticker.mime_type || "image/webp",
+      sha256: m.sticker.sha256 ?? null,
+      animated: !!m.sticker.animated,
+    };
+  }
+
   return null;
+}
+function getInboundLocation(m) {
+  if (m.type !== "location" || !m.location) return null;
+
+  const latitude = Number(m.location.latitude);
+  const longitude = Number(m.location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  return {
+    latitude,
+    longitude,
+    name: m.location.name ?? null,
+    address: m.location.address ?? null,
+    url: `https://www.google.com/maps?q=${latitude},${longitude}`,
+  };
 }
 function toMs(x) {
   // WA timestamps are seconds; if number-like use *1000
@@ -117,32 +142,37 @@ export function registerWaWebhook(app) {
             for (const m of v.messages) {
               const from = m.from;                      // customer
               const to = ourNumber;                     // our number
-              const type = m.type;
+              const inboundType = m.type;
               const text = getInboundText(m);
               const media = getInboundMedia(m);
+              const location = getInboundLocation(m);
+              const type = media?.kind === "sticker" ? "image" : inboundType;
               const ts = toMs(m.timestamp);
               
 
               L('INBOUND', 'message summary', {
                 wamid: m.id, type, from, to, ts, ticks: 'n/a',
                 text: text?.slice?.(0, 140) || null,
-                mediaId: media?.id || null
+                mediaId: media?.id || null,
+                hasLocation: !!location
               });
 
-              if (text || media) {
+              if (text || media || location) {
                 // Emit to FE and to the centralized DB history listener.
                 // Do not write directly here; the server-level inbound listener
                 // persists this payload once with id/media metadata.
                 waEvents.emit('inbound', {
                   from,
                   to,
-                  text: text || media?.caption || '',
+                  text: text || media?.caption || (location ? (location.name || location.address || "📍 Ubicación") : ''),
                   caption: media?.caption || null,
                   ts,
                   id: m.id,
                   type,
                   mediaId: media?.id || null,
                   media,
+                  location,
+                  locationUrl: location?.url || null,
                   imageUrl: type === "image" && media?.id ? `/api/media/${media.id}` : undefined,
                   videoUrl: type === "video" && media?.id ? `/api/media/${media.id}` : undefined,
                   audioUrl: type === "audio" && media?.id ? `/api/media/${media.id}` : undefined,
@@ -153,9 +183,9 @@ export function registerWaWebhook(app) {
                   context: m.context || null,
                   __rawMessage: m,
                 });
-                L('INBOUND', 'emit inbound', { event: 'inbound', to, from, ts, mediaId: media?.id || null });
+                L('INBOUND', 'emit inbound', { event: 'inbound', to, from, ts, mediaId: media?.id || null, hasLocation: !!location });
               } else {
-                L('INBOUND', 'no text or media extracted', { wamid: m.id, type });
+                L('INBOUND', 'no text, media, or location extracted', { wamid: m.id, type });
               }
             }
           } else {
