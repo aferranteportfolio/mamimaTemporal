@@ -91,6 +91,21 @@ function sortConversations(convs) {
   );
 }
 
+function messagePreview(message) {
+  if (!message) return "";
+  const text = String(message.text || message.message || "").trim();
+  if (text) return text;
+
+  const type = String(message.type || "text").toLowerCase();
+  if (type === "image") return "*Image*";
+  if (type === "video") return "*Video*";
+  if (type === "audio") return "*Audio*";
+  if (type === "location") return "*Ubicación*";
+  if (type === "document" || type === "file") return "*Documento*";
+  if (type === "ctwa_referral") return "*Anuncio*";
+  return "";
+}
+
 // Map the raw inbound WA event to your UI message shape
 function mapInboundToUi(raw) {
   const {
@@ -592,7 +607,7 @@ useEffect(() => {
         setConversations(prev =>
           prev.map(c =>
             c.id === chatId
-              ? { ...c, lastMessage: last.text ?? "", lastTimestamp: new Date(last.timestamp).getTime() }
+              ? { ...c, lastMessage: messagePreview(last), lastTimestamp: new Date(last.timestamp).getTime() }
               : c
           )
         );

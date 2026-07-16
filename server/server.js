@@ -586,6 +586,22 @@ const buildMediaUrl = (m) => {
 
 
 
+
+function messagePreviewText(message) {
+  if (!message) return "-";
+  const text = String(message.text || message.message || "").trim();
+  if (text) return text;
+
+  const type = String(message.type || "text").toLowerCase();
+  if (type === "image") return "*Image*";
+  if (type === "video") return "*Video*";
+  if (type === "audio") return "*Audio*";
+  if (type === "location") return "*Ubicación*";
+  if (type === "document" || type === "file") return "*Documento*";
+  if (type === "ctwa_referral") return "*Anuncio*";
+  return "-";
+}
+
 function summarizeConversation(product) {
   const chatId = String(product._id);
   const customerIdRaw = getCustomerIdRaw(product);
@@ -599,7 +615,7 @@ function summarizeConversation(product) {
     customerIdRaw: customerIdRaw || null,
     customerId: pretty || null,
     displayName: pretty || customerIdRaw || chatId,
-    lastMessage: last?.text ?? '-',
+    lastMessage: messagePreviewText(last),
     lastTimestamp: last?.timestamp ?? null,
     unread: 0,
   };
