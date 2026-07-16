@@ -393,6 +393,18 @@ useEffect(() => {
     const mediaUrl  = raw.imageUrl || raw.url || null;
     const outboxId  = raw.outboxId || null;
     const replyToId = raw.replyToId ?? raw.contextMessageId ?? null;
+    const hasRenderablePayload = Boolean(
+      text ||
+      raw.imageUrl ||
+      raw.videoUrl ||
+      raw.audioUrl ||
+      raw.fileUrl ||
+      raw.mediaId ||
+      raw.media?.id ||
+      raw.location ||
+      raw.locationUrl
+    );
+    const isStatusOnly = Boolean(raw.status && raw.raw && !hasRenderablePayload);
 
     let convId = raw.chatId || null;
     if (!convId && raw.to) {
@@ -451,6 +463,10 @@ useEffect(() => {
         return { ...prev, [convId]: copy };
       }
 
+      if (isStatusOnly) {
+        return prev;
+      }
+
       const payload =
         type === 'image'
           ? { id, chatId: convId, dir: 'out', from: 'me', type: 'image', imageUrl: mediaUrl, text, timestamp: new Date(whenMs).toISOString(), status, outboxId, replyToId, contextMessageId: raw.contextMessageId ?? null }
@@ -458,6 +474,8 @@ useEffect(() => {
 
       return { ...prev, [convId]: [...arr, payload] };
     });
+
+    if (isStatusOnly) return;
 
     setConversations(prev => {
       const found = prev.find(c => c.id === convId);

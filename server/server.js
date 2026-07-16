@@ -549,8 +549,20 @@ const buildMediaUrl = (m) => {
   const all = [...inbound, ...outbound];
   const unique = [];
   const seen = new Set();
+  const hasVisibleTimelineMessage = (message) => {
+    const type = String(message?.type || "text").toLowerCase();
+    const text = String(message?.text || "").trim();
+    if (text) return true;
+    if (type === "location") return !!(message?.location || message?.locationUrl);
+    if (["image", "video", "audio", "document", "file"].includes(type)) {
+      return !!(message?.imageUrl || message?.videoUrl || message?.audioUrl || message?.fileUrl || message?.mediaId);
+    }
+    if (type === "ctwa_referral") return !!message?.referral_metadata;
+    return false;
+  };
 
   for (const message of all) {
+    if (!hasVisibleTimelineMessage(message)) continue;
     const exactId = message.waId || (String(message.id || "").startsWith("wamid.") ? message.id : null);
     const fallbackKey = [
       message.dir || message.from || "",
