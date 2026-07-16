@@ -290,11 +290,29 @@ export default function MessageBubble({ message, onReply, quoted }) {
       {/* IMAGE */}
       {isImage && mediaSrc && (
         <div>
-          <img
-            src={mediaSrc}
-            alt="sent"
-            style={{ maxWidth: 280, borderRadius: 8, display: "block" }}
-          />
+          <button
+            type="button"
+            title="Abrir imagen"
+            aria-label="Abrir imagen"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(mediaSrc, "_blank", "noopener,noreferrer");
+            }}
+            style={{
+              border: 0,
+              padding: 0,
+              margin: 0,
+              background: "transparent",
+              display: "block",
+              cursor: "zoom-in",
+            }}
+          >
+            <img
+              src={mediaSrc}
+              alt="sent"
+              style={{ maxWidth: 280, borderRadius: 8, display: "block" }}
+            />
+          </button>
           {message.text && (
             <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
               {message.text}
