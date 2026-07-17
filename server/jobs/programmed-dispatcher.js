@@ -51,6 +51,7 @@ const queueSchema = new mongoose.Schema(
     dedupeKey:   String,
 
     sent:        { type: Boolean, default: false },
+    sentAt:      { type: Date },
     processing:  { type: Boolean, default: false },
     processingAt:{ type: Date },
     created_at:  { type: Date, default: Date.now },
@@ -254,6 +255,7 @@ async function sendProgramToRow(
 
   // only here if all parts succeeded
   row.sent = true;
+  row.sentAt = new Date();
   row.processing = false;
   await row.save();
 
@@ -411,6 +413,36 @@ export async function runProgrammedDispatcher({
         }
       }
 
+      // If another queued row for the same programmed message/customer has
+      // already completed, treat this row as consumed. This protects against
+      // older duplicate tasks created before dedupeKey existed (or before it
+      // included program_id) being sent again later.
+      const sameProgramFilter = {
+        $or: [
+          { program_id: row.program_id || program.id },
+          { program_id: { $exists: false } },
+          { program_id: null },
+        ],
+      };
+
+      const alreadySent = !onlyTaskId && await Queue.exists({
+        _id: { $ne: row._id },
+        sent: true,
+        state_id: row.state_id,
+        ...sameProgramFilter,
+        customer_id: row.customer_id,
+        sellerId: row.sellerId,
+        created_at: { $gte: cutoff },
+      });
+
+      if (alreadySent) {
+        row.sent = true;
+        row.sentAt = new Date();
+        row.processing = false;
+        await row.save();
+        continue;
+      }
+
       // If still inside 24h (or no timestamp info), send normally
       await sendProgramToRow(program, row, {
         sendText,
@@ -418,6 +450,28 @@ export async function runProgrammedDispatcher({
         onMessageSent,
         verbose,
       });
+
+      // Consume any duplicate pending tasks for the same programmed
+      // message/customer cohort so the next dispatcher tick cannot send the
+      // same configured message twice.
+      await Queue.updateMany(
+        {
+          _id: { $ne: row._id },
+          sent: false,
+          state_id: row.state_id,
+          ...sameProgramFilter,
+          customer_id: row.customer_id,
+          sellerId: row.sellerId,
+          created_at: { $gte: cutoff },
+        },
+        {
+          $set: {
+            sent: true,
+            sentAt: new Date(),
+            processing: false,
+          },
+        }
+      );
       ok++;
     } catch (err) {
       row.processing = false;
