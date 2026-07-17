@@ -324,6 +324,63 @@ function buildOutboundMsg(src, ourNumber) {
   };
 }
 
+
+function normalizeProductName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function sameProductName(a, b) {
+  return normalizeProductName(a) === normalizeProductName(b);
+}
+
+function uniqueByProductName(items, getName) {
+  const byName = new Map();
+
+  for (const item of items || []) {
+    const key = normalizeProductName(getName(item));
+    if (!key) continue;
+    byName.set(key, item);
+  }
+
+  return [...byName.values()];
+}
+
+async function compactDuplicateProducts(customerId) {
+  const product = await Product.findOne({ customer_id: customerId });
+  if (!product) return;
+
+  product.state = product.state && product.state.length ? product.state : [{}];
+  const state = product.state[0];
+  state.productObject = uniqueByProductName(
+    state.productObject || [],
+    (obj) => obj?.product_info_requested
+  );
+  product.costumer_profile = uniqueByProductName(
+    product.costumer_profile || [],
+    (profile) => profile?.productOfInterest
+  );
+
+  product.markModified('state');
+  product.markModified('costumer_profile');
+  await product.save();
+}
+
+function recentSameMessage(messages, payload, windowMs = 10 * 60 * 1000) {
+  if (!Array.isArray(messages) || !payload?.message) return null;
+  const payloadTime = new Date(payload.timestamp || now()).getTime();
+  if (!Number.isFinite(payloadTime)) return null;
+
+  return messages.find((message) => {
+    const messageTime = new Date(message?.timestamp || 0).getTime();
+    return (
+      Number.isFinite(messageTime) &&
+      Math.abs(payloadTime - messageTime) <= windowMs &&
+      String(message?.type || 'text') === String(payload.type || 'text') &&
+      String(message?.message || '').trim() === String(payload.message || '').trim()
+    );
+  }) || null;
+}
+
 function dateKey(value) {
   const time = value instanceof Date ? value.getTime() : Date.parse(value);
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
@@ -355,7 +412,7 @@ function findDuplicateMessage(messages, payload) {
     if (byOutboxId) return byOutboxId;
   }
 
-  return messages.find((m) => sameMessageFingerprint(m, payload)) || null;
+  return messages.find((m) => sameMessageFingerprint(m, payload)) || recentSameMessage(messages, payload);
 }
 
 function duplicateMatchClauses(path, payload) {
@@ -381,6 +438,26 @@ function duplicateMatchClauses(path, payload) {
         },
       },
     });
+  }
+
+  if (payload?.message && payload?.timestamp) {
+    const payloadTime = new Date(payload.timestamp).getTime();
+    if (Number.isFinite(payloadTime)) {
+      clauses.push({
+        [path]: {
+          $not: {
+            $elemMatch: {
+              type: payload.type || "text",
+              message: String(payload.message || "").trim(),
+              timestamp: {
+                $gte: new Date(payloadTime - 10 * 60 * 1000),
+                $lte: new Date(payloadTime + 10 * 60 * 1000),
+              },
+            },
+          },
+        },
+      });
+    }
   }
 
   return clauses;
@@ -701,65 +778,102 @@ async function initializeCostumerAndStoreMessageHistory(message, state) {
 /* ---------- Product object updates ---------- */
 async function updateProductObejctByID(customerIdRaw, product_info_requested, product_value, shippingInfo, quantity, specialProduct) {
   const customerId = normalizeCustomerId(customerIdRaw);
+  const productName = normalizeProductName(product_info_requested);
 
- 
+  if (!customerId || !productName) {
+    return false;
+  }
 
-  const product = await Product.findOne({ customer_id: customerId });
+  const product = await Product.findOne({ customer_id: customerId }, { 'state.0.purchase_state': 1 }).lean();
   if (!product) {
     return;
   }
 
-  product.state = product.state && product.state.length ? product.state : [{}];
-  const state = product.state[0];
+  const purchaseState = product.state?.[0]?.purchase_state?.[0] || {};
+  const ts = purchaseState.timestamp ? new Date(purchaseState.timestamp) : new Date(0);
+  const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+  const shouldResetFunnel = ts < fifteenDaysAgo;
+  const timestamp = now();
 
-  state.productObject = state.productObject || [];
-  const existingProduct = state.productObject.find(
-    obj => obj.product_info_requested === product_info_requested
+  const productPayload = {
+    product_info_requested,
+    timestamp,
+    product_value,
+    shippingInfo,
+    quantity,
+    specialProduct
+  };
+
+  const existingUpdate = {
+    $set: {
+      updatedAt: timestamp,
+      'state.0.productObject.$[product].product_info_requested': product_info_requested,
+      'state.0.productObject.$[product].timestamp': timestamp,
+      'state.0.productObject.$[product].product_value': product_value,
+      'state.0.productObject.$[product].shippingInfo': shippingInfo,
+      'state.0.productObject.$[product].quantity': quantity,
+      'state.0.productObject.$[product].specialProduct': specialProduct,
+    }
+  };
+
+  if (shouldResetFunnel) {
+    existingUpdate.$set['state.0.purchase_state.0.funnel_state'] = 1;
+    existingUpdate.$set['state.0.purchase_state.0.timestamp'] = timestamp;
+  }
+
+  const existingResult = await Product.updateOne(
+    { customer_id: customerId, 'state.0.productObject.product_info_requested': product_info_requested },
+    existingUpdate,
+    { arrayFilters: [{ 'product.product_info_requested': product_info_requested }] }
   );
 
-  state.purchase_state = state.purchase_state && state.purchase_state.length ? state.purchase_state : [{}];
-  const ps0 = state.purchase_state[0];
-  const ts = ps0.timestamp ? new Date(ps0.timestamp) : new Date(0);
-  const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
-
-  if (!existingProduct) {
-    product.costumer_profile = product.costumer_profile || [];
-    product.costumer_profile.push({
-      productOfInterest: product_info_requested,
-      timestamp: now()
-    });
-
-    state.productObject.push({
-      product_info_requested,
-      timestamp: now(),
-      product_value,
-      shippingInfo,
-      quantity,
-      specialProduct
-    });
-
-    if (ts < fifteenDaysAgo) {
-      ps0.funnel_state = 1;
-      ps0.timestamp = now();
-    }
-
-    await product.save();
-    return true;
-  } else {
-    existingProduct.timestamp = now();
-    existingProduct.product_value = product_value;
-    existingProduct.shippingInfo = shippingInfo;
-    existingProduct.quantity = quantity;
-    existingProduct.specialProduct = specialProduct;
-
-    if (ts < fifteenDaysAgo) {
-      ps0.funnel_state = 1;
-      ps0.timestamp = now();
-    }
-
-    await product.save();
+  if (existingResult.modifiedCount || existingResult.matchedCount) {
+    await Product.updateOne(
+      {
+        customer_id: customerId,
+        costumer_profile: { $not: { $elemMatch: { productOfInterest: product_info_requested } } }
+      },
+      { $push: { costumer_profile: { productOfInterest: product_info_requested, timestamp } } }
+    );
+    await compactDuplicateProducts(customerId);
     return false;
   }
+
+  const insertUpdate = {
+    $set: { updatedAt: timestamp },
+    $push: {
+      'state.0.productObject': productPayload,
+      costumer_profile: { productOfInterest: product_info_requested, timestamp }
+    }
+  };
+
+  if (shouldResetFunnel) {
+    insertUpdate.$set['state.0.purchase_state.0.funnel_state'] = 1;
+    insertUpdate.$set['state.0.purchase_state.0.timestamp'] = timestamp;
+  }
+
+  const insertResult = await Product.updateOne(
+    {
+      customer_id: customerId,
+      'state.0.productObject': { $not: { $elemMatch: { product_info_requested } } }
+    },
+    insertUpdate
+  );
+
+  if (insertResult.modifiedCount) {
+    await compactDuplicateProducts(customerId);
+    return true;
+  }
+
+  // Another concurrent handler inserted the product between our read and guarded
+  // insert. Update that element instead of appending a duplicate.
+  await Product.updateOne(
+    { customer_id: customerId, 'state.0.productObject.product_info_requested': product_info_requested },
+    existingUpdate,
+    { arrayFilters: [{ 'product.product_info_requested': product_info_requested }] }
+  );
+  await compactDuplicateProducts(customerId);
+  return false;
 }
 
 /* ---------- Shipping status updates ---------- */
