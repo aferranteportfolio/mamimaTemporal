@@ -49,6 +49,19 @@ async function listPrograms() {
   return out;
 }
 
+
+function limaDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
 function cleanTags(tags = []) {
   return [...new Set((Array.isArray(tags) ? tags : [])
     .map((x) => String(x || '').trim())
@@ -179,11 +192,12 @@ export async function dailyQuerryAllStates() {
       if (!sendAt) continue;
 
       const dedupeTags = selectedTags.length ? selectedTags.sort().join('|') : 'all';
-      // Include the inbound timestamp so a new customer message opens a new
-      // eligible scheduling window. Without this, an older sent/skipped task for
-      // the same program/customer/tag permanently blocks future follow-ups.
-      const inboundKey = lastInboundDate.getTime();
-      const dedupeKey = `${program.id}:${program.state}:${customer_id}:${latestSeller}:${inboundKey}:${dedupeTags}`;
+      // Only queue one task per programmed message/customer/seller/tag set per
+      // Lima calendar day. Multiple customer replies in the same day should not
+      // create multiple copies of the same programmed follow-up.
+      const dayKey = limaDateKey(lastInboundDate);
+      if (!dayKey) continue;
+      const dedupeKey = `${program.id}:${program.state}:${customer_id}:${latestSeller}:${dayKey}:${dedupeTags}`;
 
       candidates.push({
         program_id: program.id,

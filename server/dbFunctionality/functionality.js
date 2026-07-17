@@ -324,6 +324,45 @@ function buildOutboundMsg(src, ourNumber) {
   };
 }
 
+
+function normalizeProductName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function sameProductName(a, b) {
+  return normalizeProductName(a) === normalizeProductName(b);
+}
+
+function uniqueByProductName(items, getName) {
+  const seen = new Set();
+  const result = [];
+
+  for (const item of items || []) {
+    const key = normalizeProductName(getName(item));
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+
+  return result;
+}
+
+function recentSameMessage(messages, payload, windowMs = 10 * 60 * 1000) {
+  if (!Array.isArray(messages) || !payload?.message) return null;
+  const payloadTime = new Date(payload.timestamp || now()).getTime();
+  if (!Number.isFinite(payloadTime)) return null;
+
+  return messages.find((message) => {
+    const messageTime = new Date(message?.timestamp || 0).getTime();
+    return (
+      Number.isFinite(messageTime) &&
+      Math.abs(payloadTime - messageTime) <= windowMs &&
+      String(message?.type || 'text') === String(payload.type || 'text') &&
+      String(message?.message || '').trim() === String(payload.message || '').trim()
+    );
+  }) || null;
+}
+
 function dateKey(value) {
   const time = value instanceof Date ? value.getTime() : Date.parse(value);
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
@@ -355,7 +394,7 @@ function findDuplicateMessage(messages, payload) {
     if (byOutboxId) return byOutboxId;
   }
 
-  return messages.find((m) => sameMessageFingerprint(m, payload)) || null;
+  return messages.find((m) => sameMessageFingerprint(m, payload)) || recentSameMessage(messages, payload);
 }
 
 function duplicateMatchClauses(path, payload) {
@@ -381,6 +420,26 @@ function duplicateMatchClauses(path, payload) {
         },
       },
     });
+  }
+
+  if (payload?.message && payload?.timestamp) {
+    const payloadTime = new Date(payload.timestamp).getTime();
+    if (Number.isFinite(payloadTime)) {
+      clauses.push({
+        [path]: {
+          $not: {
+            $elemMatch: {
+              type: payload.type || "text",
+              message: String(payload.message || "").trim(),
+              timestamp: {
+                $gte: new Date(payloadTime - 10 * 60 * 1000),
+                $lte: new Date(payloadTime + 10 * 60 * 1000),
+              },
+            },
+          },
+        },
+      });
+    }
   }
 
   return clauses;
@@ -701,8 +760,11 @@ async function initializeCostumerAndStoreMessageHistory(message, state) {
 /* ---------- Product object updates ---------- */
 async function updateProductObejctByID(customerIdRaw, product_info_requested, product_value, shippingInfo, quantity, specialProduct) {
   const customerId = normalizeCustomerId(customerIdRaw);
+  const productName = normalizeProductName(product_info_requested);
 
- 
+  if (!customerId || !productName) {
+    return false;
+  }
 
   const product = await Product.findOne({ customer_id: customerId });
   if (!product) {
@@ -711,10 +773,17 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
 
   product.state = product.state && product.state.length ? product.state : [{}];
   const state = product.state[0];
+  state.productObject = uniqueByProductName(
+    state.productObject || [],
+    (obj) => obj?.product_info_requested
+  );
+  product.costumer_profile = uniqueByProductName(
+    product.costumer_profile || [],
+    (profile) => profile?.productOfInterest
+  );
 
-  state.productObject = state.productObject || [];
   const existingProduct = state.productObject.find(
-    obj => obj.product_info_requested === product_info_requested
+    obj => sameProductName(obj.product_info_requested, productName)
   );
 
   state.purchase_state = state.purchase_state && state.purchase_state.length ? state.purchase_state : [{}];
@@ -723,7 +792,6 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
   const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
 
   if (!existingProduct) {
-    product.costumer_profile = product.costumer_profile || [];
     product.costumer_profile.push({
       productOfInterest: product_info_requested,
       timestamp: now()
@@ -745,21 +813,37 @@ async function updateProductObejctByID(customerIdRaw, product_info_requested, pr
 
     await product.save();
     return true;
-  } else {
-    existingProduct.timestamp = now();
-    existingProduct.product_value = product_value;
-    existingProduct.shippingInfo = shippingInfo;
-    existingProduct.quantity = quantity;
-    existingProduct.specialProduct = specialProduct;
-
-    if (ts < fifteenDaysAgo) {
-      ps0.funnel_state = 1;
-      ps0.timestamp = now();
-    }
-
-    await product.save();
-    return false;
   }
+
+  existingProduct.product_info_requested = product_info_requested;
+  existingProduct.timestamp = now();
+  existingProduct.product_value = product_value;
+  existingProduct.shippingInfo = shippingInfo;
+  existingProduct.quantity = quantity;
+  existingProduct.specialProduct = specialProduct;
+
+  const existingProfile = product.costumer_profile.find((profile) =>
+    sameProductName(profile?.productOfInterest, productName)
+  );
+  if (existingProfile) {
+    existingProfile.productOfInterest = product_info_requested;
+    existingProfile.timestamp = now();
+  } else {
+    product.costumer_profile.push({
+      productOfInterest: product_info_requested,
+      timestamp: now()
+    });
+  }
+
+  if (ts < fifteenDaysAgo) {
+    ps0.funnel_state = 1;
+    ps0.timestamp = now();
+  }
+
+  product.markModified('state');
+  product.markModified('costumer_profile');
+  await product.save();
+  return false;
 }
 
 /* ---------- Shipping status updates ---------- */
