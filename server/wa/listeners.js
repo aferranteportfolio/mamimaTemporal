@@ -41,12 +41,12 @@ function toInboundUI(raw) {
 
   // Normalize type
   const hintedType = (raw.type || raw.media?.kind || "").toLowerCase();
-  const type = ["text", "image", "video", "audio", "ctwa_referral"].includes(hintedType)
+  const type = ["text", "image", "video", "audio", "location", "document", "file", "ctwa_referral"].includes(hintedType)
     ? hintedType
     : "text";
 
   const media = raw.media || {};
-  let imageUrl, videoUrl, audioUrl;
+  let imageUrl, videoUrl, audioUrl, fileUrl, locationUrl;
 
   if (type === "audio") {
     // 👉 for audio we only care about the audio URL
@@ -63,6 +63,16 @@ function toInboundUI(raw) {
 
     if (type === "image") imageUrl = mediaUrl;
     if (type === "video") videoUrl = mediaUrl;
+    if (type === "document" || type === "file") fileUrl = mediaUrl;
+  }
+
+  if (type === "location") {
+    locationUrl =
+      raw.locationUrl ||
+      raw.url ||
+      (Number.isFinite(Number(raw.location?.latitude)) && Number.isFinite(Number(raw.location?.longitude))
+        ? `https://www.google.com/maps?q=${Number(raw.location.latitude)},${Number(raw.location.longitude)}`
+        : undefined);
   }
 
   return {
@@ -75,6 +85,9 @@ function toInboundUI(raw) {
     imageUrl,
     videoUrl,
     audioUrl,                                   // 👈 important
+    fileUrl,
+    location: raw.location || undefined,
+    locationUrl,
     mediaId: raw.mediaId || media.id || undefined,
     referral_type: raw.referral_type || null,
     referral_metadata: raw.referral_metadata || null,

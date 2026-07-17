@@ -1,7 +1,6 @@
 // server/wa/webhook.js
 import express from "express";
 import { getSentMessage } from "./message-store.js";
-import { Product } from "../dbFunctionality/schemas/schema.js";
 import { waEvents } from "./wa-events.js";
 
 
@@ -16,6 +15,75 @@ function getInboundText(m) {
   if (m.interactive?.type === "button_reply") return m.interactive?.button_reply?.title || null;
   if (m.interactive?.type === "list_reply")   return m.interactive?.list_reply?.title   || null;
   return null;
+}
+function getInboundMedia(m) {
+  if (m.type === "image" && m.image?.id) {
+    return {
+      kind: "image",
+      id: m.image.id,
+      mimeType: m.image.mime_type,
+      sha256: m.image.sha256 ?? null,
+      caption: m.image.caption ?? null,
+    };
+  }
+
+  if (m.type === "video" && m.video?.id) {
+    return {
+      kind: "video",
+      id: m.video.id,
+      mimeType: m.video.mime_type,
+      sha256: m.video.sha256 ?? null,
+      caption: m.video.caption ?? null,
+    };
+  }
+
+  if (m.type === "audio" && m.audio?.id) {
+    return {
+      kind: "audio",
+      id: m.audio.id,
+      mimeType: m.audio.mime_type,
+      sha256: m.audio.sha256 ?? null,
+      voice: !!m.audio.voice,
+    };
+  }
+
+  if (m.type === "document" && m.document?.id) {
+    return {
+      kind: "document",
+      id: m.document.id,
+      mimeType: m.document.mime_type,
+      sha256: m.document.sha256 ?? null,
+      filename: m.document.filename ?? null,
+      caption: m.document.caption ?? null,
+    };
+  }
+
+  if (m.type === "sticker" && m.sticker?.id) {
+    return {
+      kind: "sticker",
+      id: m.sticker.id,
+      mimeType: m.sticker.mime_type || "image/webp",
+      sha256: m.sticker.sha256 ?? null,
+      animated: !!m.sticker.animated,
+    };
+  }
+
+  return null;
+}
+function getInboundLocation(m) {
+  if (m.type !== "location" || !m.location) return null;
+
+  const latitude = Number(m.location.latitude);
+  const longitude = Number(m.location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  return {
+    latitude,
+    longitude,
+    name: m.location.name ?? null,
+    address: m.location.address ?? null,
+    url: `https://www.google.com/maps?q=${latitude},${longitude}`,
+  };
 }
 function toMs(x) {
   // WA timestamps are seconds; if number-like use *1000
@@ -35,37 +103,6 @@ function ticksFor(status) {
 
 // (optional) track last status to show transitions in logs
 const lastStatusByWamid = new Map();
-
-// --- persistence helpers (unchanged) ---
-async function saveInboundToMongo({ from, to, text, ts }) {
-  const base = { latestSeller: String(to) };
-  const update = {
-    $setOnInsert: { createdAt: new Date() },
-    $set: base,
-    $push: { customer_messages: { message: text, timestamp: new Date(ts) } }
-  };
-  await Product.updateOne({ customer_id: String(from) }, update, { upsert: true });
-}
-
-async function saveOutboundToMongo({ from, to, text, ts }) {
-  const doc = await Product.findOne({ customer_id: String(to) });
-  if (!doc) {
-    await Product.create({
-      customer_id: String(to),
-      latestSeller: String(from),
-      state: [{ messagesSentCollection: [{ message: text, timestamp: new Date(ts) }] }]
-    });
-    L('DB', 'Created new conversation w/ outbound message', { to, from, ts });
-    return;
-  }
-  if (!Array.isArray(doc.state) || !doc.state[0]) {
-    doc.state = [{ messagesSentCollection: [] }];
-  }
-  doc.latestSeller = String(from);
-  doc.state[0].messagesSentCollection.push({ message: text, timestamp: new Date(ts) });
-  await doc.save();
-  L('DB', 'Appended outbound message', { to, from, count: doc.state[0].messagesSentCollection.length });
-}
 
 export function registerWaWebhook(app) {
   // GET verify
@@ -105,39 +142,50 @@ export function registerWaWebhook(app) {
             for (const m of v.messages) {
               const from = m.from;                      // customer
               const to = ourNumber;                     // our number
-              const type = m.type;
+              const inboundType = m.type;
               const text = getInboundText(m);
+              const media = getInboundMedia(m);
+              const location = getInboundLocation(m);
+              const type = media?.kind === "sticker" ? "image" : inboundType;
               const ts = toMs(m.timestamp);
               
 
               L('INBOUND', 'message summary', {
                 wamid: m.id, type, from, to, ts, ticks: 'n/a',
-                text: text?.slice?.(0, 140) || null
+                text: text?.slice?.(0, 140) || null,
+                mediaId: media?.id || null,
+                hasLocation: !!location
               });
 
-              if (text) {
-                // Emit to FE
+              if (text || media || location) {
+                // Emit to FE and to the centralized DB history listener.
+                // Do not write directly here; the server-level inbound listener
+                // persists this payload once with id/media metadata.
                 waEvents.emit('inbound', {
                   from,
                   to,
-                  text,
+                  text: text || media?.caption || (location ? (location.name || location.address || "📍 Ubicación") : ''),
+                  caption: media?.caption || null,
                   ts,
                   id: m.id,
                   type,
+                  mediaId: media?.id || null,
+                  media,
+                  location,
+                  locationUrl: location?.url || null,
+                  imageUrl: type === "image" && media?.id ? `/api/media/${media.id}` : undefined,
+                  videoUrl: type === "video" && media?.id ? `/api/media/${media.id}` : undefined,
+                  audioUrl: type === "audio" && media?.id ? `/api/media/${media.id}` : undefined,
+                  documentUrl: type === "document" && media?.id ? `/api/media/${media.id}` : undefined,
                   // Preserve CTWA/ad metadata so auto-reply matching can
                   // evaluate "responde a anuncios" triggers against ad text.
                   referral: m.referral || null,
                   context: m.context || null,
                   __rawMessage: m,
                 });
-                L('INBOUND', 'emit inbound', { event: 'inbound', to, from, ts });
-
-                // Persist
-                saveInboundToMongo({ from, to, text, ts })
-                  .then(() => L('DB', 'inbound saved', { from }))
-                  .catch(err => L('DB', 'inbound save error', { error: String(err?.message || err) }));
+                L('INBOUND', 'emit inbound', { event: 'inbound', to, from, ts, mediaId: media?.id || null, hasLocation: !!location });
               } else {
-                L('INBOUND', 'no text extracted', { wamid: m.id, type });
+                L('INBOUND', 'no text, media, or location extracted', { wamid: m.id, type });
               }
             }
           } else {
@@ -187,12 +235,10 @@ export function registerWaWebhook(app) {
               });
               L('STATUS', 'emit outbound', { event: 'outbound', wamid, status });
 
-              if (status === "sent" && text) {
-                // only on "sent" do we persist the outbound text
-                saveOutboundToMongo({ from: ourNumber, to, text, ts })
-                  .then(() => L('DB', 'outbound saved', { to }))
-                  .catch(err => L('DB', 'outbound save error', { error: String(err?.message || err) }));
-              }
+              // History persistence for outbound messages is handled by the
+              // outbox/send routes when the message is accepted by WhatsApp.
+              // Status webhooks should only update delivery state/logs; writing
+              // history here creates duplicate text rows without media metadata.
             }
           }
         }

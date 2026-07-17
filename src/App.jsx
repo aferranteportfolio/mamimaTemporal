@@ -91,6 +91,21 @@ function sortConversations(convs) {
   );
 }
 
+function messagePreview(message) {
+  if (!message) return "";
+  const text = String(message.text || message.message || "").trim();
+  if (text) return text;
+
+  const type = String(message.type || "text").toLowerCase();
+  if (type === "image") return "*Image*";
+  if (type === "video") return "*Video*";
+  if (type === "audio") return "*Audio*";
+  if (type === "location") return "*Ubicación*";
+  if (type === "document" || type === "file") return "*Documento*";
+  if (type === "ctwa_referral") return "*Anuncio*";
+  return "";
+}
+
 // Map the raw inbound WA event to your UI message shape
 function mapInboundToUi(raw) {
   const {
@@ -393,6 +408,18 @@ useEffect(() => {
     const mediaUrl  = raw.imageUrl || raw.url || null;
     const outboxId  = raw.outboxId || null;
     const replyToId = raw.replyToId ?? raw.contextMessageId ?? null;
+    const hasRenderablePayload = Boolean(
+      text ||
+      raw.imageUrl ||
+      raw.videoUrl ||
+      raw.audioUrl ||
+      raw.fileUrl ||
+      raw.mediaId ||
+      raw.media?.id ||
+      raw.location ||
+      raw.locationUrl
+    );
+    const isStatusOnly = Boolean(raw.status && !outboxId && !hasRenderablePayload);
 
     let convId = raw.chatId || null;
     if (!convId && raw.to) {
@@ -451,6 +478,10 @@ useEffect(() => {
         return { ...prev, [convId]: copy };
       }
 
+      if (isStatusOnly) {
+        return prev;
+      }
+
       const payload =
         type === 'image'
           ? { id, chatId: convId, dir: 'out', from: 'me', type: 'image', imageUrl: mediaUrl, text, timestamp: new Date(whenMs).toISOString(), status, outboxId, replyToId, contextMessageId: raw.contextMessageId ?? null }
@@ -458,6 +489,8 @@ useEffect(() => {
 
       return { ...prev, [convId]: [...arr, payload] };
     });
+
+    if (isStatusOnly) return;
 
     setConversations(prev => {
       const found = prev.find(c => c.id === convId);
@@ -574,7 +607,7 @@ useEffect(() => {
         setConversations(prev =>
           prev.map(c =>
             c.id === chatId
-              ? { ...c, lastMessage: last.text ?? "", lastTimestamp: new Date(last.timestamp).getTime() }
+              ? { ...c, lastMessage: messagePreview(last), lastTimestamp: new Date(last.timestamp).getTime() }
               : c
           )
         );

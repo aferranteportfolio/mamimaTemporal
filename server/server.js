@@ -547,14 +547,60 @@ const buildMediaUrl = (m) => {
   });
 
   const all = [...inbound, ...outbound];
-  all.sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
-  return all;
+  const unique = [];
+  const seen = new Set();
+  const hasVisibleTimelineMessage = (message) => {
+    const type = String(message?.type || "text").toLowerCase();
+    const text = String(message?.text || "").trim();
+    if (text) return true;
+    if (type === "location") return !!(message?.location || message?.locationUrl);
+    if (["image", "video", "audio", "document", "file"].includes(type)) {
+      return !!(message?.imageUrl || message?.videoUrl || message?.audioUrl || message?.fileUrl || message?.mediaId);
+    }
+    if (type === "ctwa_referral") return !!message?.referral_metadata;
+    return false;
+  };
+
+  for (const message of all) {
+    if (!hasVisibleTimelineMessage(message)) continue;
+    const exactId = message.waId || (String(message.id || "").startsWith("wamid.") ? message.id : null);
+    const fallbackKey = [
+      message.dir || message.from || "",
+      message.type || "text",
+      message.text || "",
+      message.timestamp || "",
+    ].join("|");
+    const key = exactId || fallbackKey;
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(message);
+  }
+
+  unique.sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
+  return unique;
 }
 
 
 
 
 
+
+
+function messagePreviewText(message) {
+  if (!message) return "-";
+  const text = String(message.text || message.message || "").trim();
+  if (text) return text;
+
+  const type = String(message.type || "text").toLowerCase();
+  if (type === "image") return "*Image*";
+  if (type === "video") return "*Video*";
+  if (type === "audio") return "*Audio*";
+  if (type === "location") return "*Ubicación*";
+  if (type === "document" || type === "file") return "*Documento*";
+  if (type === "ctwa_referral") return "*Anuncio*";
+  return "-";
+}
 
 function summarizeConversation(product) {
   const chatId = String(product._id);
@@ -569,7 +615,7 @@ function summarizeConversation(product) {
     customerIdRaw: customerIdRaw || null,
     customerId: pretty || null,
     displayName: pretty || customerIdRaw || chatId,
-    lastMessage: last?.text ?? '-',
+    lastMessage: messagePreviewText(last),
     lastTimestamp: last?.timestamp ?? null,
     unread: 0,
   };
