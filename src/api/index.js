@@ -6,8 +6,7 @@ const API_BASE = 'http://localhost:3050'; // same host you use in realtime.js
 
 const raw =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_USE_MOCKS) ??
-  process.env.VITE_USE_MOCKS ??
-  "true";
+  (typeof process !== "undefined" && process.env && process.env.VITE_USE_MOCKS) ??  "true";
 
 const useMocks = String(raw).toLowerCase() === "true";
 const api = useMocks ? mock : real;
