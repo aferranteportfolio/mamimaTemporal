@@ -102,7 +102,7 @@ function state2IsValid(state = []) {
 }
 
 function productMatchesProgramState(productState = [], programState) {
-  if (programState === 1) return hasFunnelState(productState, 0);
+  if (programState === 1) return hasFunnelState(productState, 1);
   if (programState === 2) return state2IsValid(productState);
   return hasFunnelState(productState, programState);
 }
@@ -130,7 +130,7 @@ export async function dailyQuerryAllStates() {
   const rawProducts = await Product.find({
     lastInboundTs: { $gte: minLastInbound },
     'state.purchase_state': {
-      $elemMatch: { funnel_state: { $in: [0, 2, 3, 4, 5] } }
+      $elemMatch: { funnel_state: { $in: [1, 2, 3, 4, 5] } }
     }
   }).lean();
 
