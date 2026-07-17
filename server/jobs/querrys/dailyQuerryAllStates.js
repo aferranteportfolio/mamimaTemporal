@@ -171,8 +171,8 @@ export async function dailyQuerryAllStates() {
     for (const s of state) {
       const reMarketing = s.reMarketing;
       const lastReMarketing = reMarketing?.[reMarketing.length - 1];
-      const remarketing_state = lastReMarketing?.remarketing_state;
-      if (remarketing_state !== undefined && remarketing_state !== null) {
+      const remarketing_state = Number(lastReMarketing?.remarketing_state || 0);
+      if (remarketing_state > 0) {
         hasRemarketing = true;
         break;
       }
