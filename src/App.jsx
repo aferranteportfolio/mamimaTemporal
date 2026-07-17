@@ -330,6 +330,19 @@ useEffect(() => {
   //  try { console.log('[UNSEEN] setActiveChatId →', activeChatId); } catch {}
   }, [activeChatId]);
 
+  useEffect(() => {
+    const closeActiveChat = (event) => {
+      if (event.key !== "Escape") return;
+      if (!activeChatIdRef.current) return;
+
+      event.preventDefault();
+      setActiveChatId(null);
+    };
+
+    window.addEventListener("keydown", closeActiveChat);
+    return () => window.removeEventListener("keydown", closeActiveChat);
+  }, []);
+
   function handleInbound(raw) {
     const msg = mapInboundToUi(raw);
     const senderDigits = normalizeId(msg.from).digits;
