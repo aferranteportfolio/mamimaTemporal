@@ -20,6 +20,7 @@ const SEND_GAP_MS_IMAGE = 1600;
 const SEND_GAP_MS_TEXT  = 500;
 const BUSINESS_START_HOUR = 8;
 const BUSINESS_END_HOUR = 20; // exclusive: [08:00, 20:00)
+const SAME_PROGRAM_COOLDOWN_DAYS = 7;
 
 // === (optional) mongoose connection event logs ===
 export function installConnectionEventLogs() {
@@ -424,6 +425,43 @@ export async function runProgrammedDispatcher({
           { program_id: null },
         ],
       };
+
+      // Weekly cooldown: a customer should not receive the same programmed
+      // message type more than once within any 7-day window. We mark the
+      // current row as consumed instead of retrying it, otherwise it could send
+      // as soon as the cooldown expires even though it was created for an older
+      // conversation moment. `sentAt` is preferred, while `created_at` keeps the
+      // guard effective for older consumed rows that may not have a sentAt.
+      const weeklyCooldownCutoff = now.subtract(SAME_PROGRAM_COOLDOWN_DAYS, "day").toDate();
+      const recentlySentSameProgram = await Queue.exists({
+        _id: { $ne: row._id },
+        sent: true,
+        state_id: row.state_id,
+        ...sameProgramFilter,
+        customer_id: row.customer_id,
+        sellerId: row.sellerId,
+        $or: [
+          { sentAt: { $gte: weeklyCooldownCutoff } },
+          { sentAt: { $exists: false }, created_at: { $gte: weeklyCooldownCutoff } },
+          { sentAt: null, created_at: { $gte: weeklyCooldownCutoff } },
+        ],
+      });
+
+      if (recentlySentSameProgram) {
+        row.sent = true;
+        row.sentAt = new Date();
+        row.processing = false;
+        await row.save();
+        if (verbose) {
+          console.warn(
+            "[PD] skipped row due to weekly same-program cooldown",
+            row._id,
+            row.customer_id,
+            row.program_id || program.id
+          );
+        }
+        continue;
+      }
 
       const alreadySent = !onlyTaskId && await Queue.exists({
         _id: { $ne: row._id },
