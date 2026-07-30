@@ -418,20 +418,19 @@ export async function runProgrammedDispatcher({
       // already completed, treat this row as consumed. This protects against
       // older duplicate tasks created before dedupeKey existed (or before it
       // included program_id) being sent again later.
-      const sameProgramFilter = {
-        $or: [
-          { program_id: row.program_id || program.id },
-          { program_id: { $exists: false } },
-          { program_id: null },
-        ],
-      };
+      // A legacy task without program_id cannot prove which configured message
+      // it belongs to. Including every legacy task here makes one old task for
+      // a funnel suppress *all* programs in that funnel.
+      const sameProgramFilter = { program_id: row.program_id || program.id };
 
       // Weekly cooldown: a customer should not receive the same programmed
       // message type more than once within any 7-day window. We mark the
       // current row as consumed instead of retrying it, otherwise it could send
       // as soon as the cooldown expires even though it was created for an older
-      // conversation moment. `sentAt` is preferred, while `created_at` keeps the
-      // guard effective for older consumed rows that may not have a sentAt.
+      // conversation moment. Only rows with sentAt are eligible: rows rejected
+      // by the 24-hour guard are also marked `sent` (meaning consumed), but have
+      // no sentAt because WhatsApp never received their message. Treating their
+      // creation time as a delivery incorrectly silences later messages.
       const weeklyCooldownCutoff = now.subtract(SAME_PROGRAM_COOLDOWN_DAYS, "day").toDate();
       const recentlySentSameProgram = await Queue.exists({
         _id: { $ne: row._id },
@@ -440,11 +439,7 @@ export async function runProgrammedDispatcher({
         ...sameProgramFilter,
         customer_id: row.customer_id,
         sellerId: row.sellerId,
-        $or: [
-          { sentAt: { $gte: weeklyCooldownCutoff } },
-          { sentAt: { $exists: false }, created_at: { $gte: weeklyCooldownCutoff } },
-          { sentAt: null, created_at: { $gte: weeklyCooldownCutoff } },
-        ],
+        sentAt: { $gte: weeklyCooldownCutoff },
       });
 
       if (recentlySentSameProgram) {
