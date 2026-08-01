@@ -348,6 +348,15 @@ useEffect(() => {
     const senderDigits = normalizeId(msg.from).digits;
     const senderSpaced = normalizeId(msg.from).spaced;
 
+    if (!senderDigits) {
+      console.error("[CHAT-DIAG][inbound:dropped-missing-sender]", {
+        messageId: msg.id || null,
+        chatId: msg.chatId || null,
+        from: msg.from || null,
+      });
+      return;
+    }
+
     const conv = findConversationByAny(conversations, msg.from);
     const convId = conv?.id ?? senderDigits;
 
@@ -542,7 +551,18 @@ useEffect(() => {
         const convs = await fetchConversations();
         console.log('[Init] conversations raw', { count: convs.length, sample: convs.slice(0, 5) });
         
-        const normalized = convs.map(normalizeConversation);
+        const normalized = convs
+          .map(normalizeConversation)
+          .filter(conversation => {
+            const valid = Boolean(normalizeId(conversation.id).digits);
+            if (!valid) {
+              console.warn("[CHAT-DIAG][conversation:dropped-invalid-id]", {
+                id: conversation.id || null,
+                phone: conversation.phone || null,
+              });
+            }
+            return valid;
+          });
         const sorted = sortConversations(normalized);
         setConversations(sorted);
 
@@ -677,6 +697,13 @@ useEffect(() => {
 
   // pick chat & lazy-load messages if needed (kept)
 async function handleSelectChat(id) {
+  if (!normalizeId(id).digits) {
+    console.error("[CHAT-DIAG][conversation:selection-blocked]", {
+      selectedChatId: id || null,
+      previousChatId: activeChatIdRef.current,
+    });
+    return;
+  }
   const fromSearch = searchResults.find(c => c.id === id);
 if (fromSearch) {
   setConversations(prev => {

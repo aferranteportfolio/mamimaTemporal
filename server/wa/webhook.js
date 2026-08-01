@@ -140,7 +140,9 @@ export function registerWaWebhook(app) {
           // --- INBOUND ---
           if (Array.isArray(v.messages) && ourNumber) {
             for (const m of v.messages) {
-              const from = m.from;                      // customer
+              // `messages[].from` is canonical, while `contacts[].wa_id` is a
+              // reliable fallback present in Meta inbound envelopes.
+              const from = m.from || v.contacts?.[0]?.wa_id || null; // customer
               const to = ourNumber;                     // our number
               const inboundType = m.type;
               const text = getInboundText(m);
@@ -157,7 +159,13 @@ export function registerWaWebhook(app) {
                 hasLocation: !!location
               });
 
-              if (text || media || location) {
+              if (!from) {
+                console.error("[WA][WEBHOOK][DROP_MISSING_SENDER]", {
+                  id: m?.id ?? null,
+                  type: m?.type ?? null,
+                  hasContactsWaId: Boolean(v.contacts?.[0]?.wa_id),
+                });
+              } else if (text || media || location) {
                 // Emit to FE and to the centralized DB history listener.
                 // Do not write directly here; the server-level inbound listener
                 // persists this payload once with id/media metadata.

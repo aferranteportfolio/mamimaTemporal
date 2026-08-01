@@ -256,7 +256,7 @@ function extractSimpleMessages(body) {
         }
 
         const normalized = {
-          from: safeDigits(m?.from),     // customer number (digits)
+          from: safeDigits(m?.from || v?.contacts?.[0]?.wa_id), // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
           id: m?.id ?? null,             // wamid
           ts: tsToIso(m?.timestamp),     // ISO string
