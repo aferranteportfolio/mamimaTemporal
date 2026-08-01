@@ -997,11 +997,22 @@ const conversationsForSidebar = useMemo(() => {
   useEffect(() => {
     const activeId = chatWindowProps.activeConversation?.id;
     const list = chatWindowProps.messages || [];
+    if (!activeChatId) return;
 
-
-
-
-  }, [chatWindowProps.activeConversation, chatWindowProps.connectivity, chatWindowProps.messages]);
+    console.info("[CHAT-DIAG][active-conversation:resolved]", {
+      activeChatId,
+      found: Boolean(chatWindowProps.activeConversation),
+      resolvedId: activeId || null,
+      displayName: chatWindowProps.activeConversation?.displayName || null,
+      customerId: chatWindowProps.activeConversation?.customerId || null,
+      phone: chatWindowProps.activeConversation?.phone || null,
+      customerIdRaw: chatWindowProps.activeConversation?.customerIdRaw || null,
+      messageCount: list.length,
+      conversationCount: conversations.length,
+      searchResultCount: searchResults.length,
+      searchActive: Boolean(searchTerm.trim()),
+    });
+  }, [activeChatId, active, activeMessages, conversations.length, searchResults.length, searchTerm]);
   // ---------- END ----------
 
   if (loading) {
