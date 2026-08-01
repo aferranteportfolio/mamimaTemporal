@@ -1653,7 +1653,7 @@ waEvents.on("inbound", async (payload = {}) => {
   const stored = await initializeCostumerAndStoreMessageHistory(payload, 1);
   if (!stored) return;
   try {
-    mesageSorter(payload);
+    await mesageSorter(payload);
   } catch (err) {
     console.error("mesageSorter error:", err, "for message:", payload);
   }
