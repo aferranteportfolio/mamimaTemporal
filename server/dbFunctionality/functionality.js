@@ -610,17 +610,36 @@ export async function updateMessageReceivedById(doc, inboundMsg, outboundMsg, ou
  */
 async function initializeCostumerAndStoreMessageHistory(message, state) {
   //console.log("158 dbfunc " , message)
-  
-  const customerRaw = state === 1 ? message.from : message.to; 
-  const ourRaw = state === 1 ? message.to : message.from;
+
+  const inboundCustomerRaw =
+    message?.from ??
+    message?.fromPhone ??
+    message?.customerId ??
+    message?.customer_id ??
+    message?.__rawMessage?.from ??
+    message?.raw?.from ??
+    message?.raw?.__rawMessage?.from;
+  const inboundBusinessRaw =
+    message?.to ??
+    message?.recipient_id ??
+    message?.__rawValue?.metadata?.display_phone_number ??
+    message?.raw?.to;
+
+  const customerRaw = state === 1 ? inboundCustomerRaw : message?.to;
+  const ourRaw = state === 1 ? inboundBusinessRaw : message?.from;
 
 
   const customerId = normalizeCustomerId(customerRaw);
   const ourNumber  = normalizeCustomerId(ourRaw);
 
   if (!customerId) {
-    console.error('❌ initializeCostumerAndStoreMessageHistory: invalid customerId', { customerRaw });
-    return;
+    console.error('❌ initializeCostumerAndStoreMessageHistory: invalid customerId', {
+      customerRaw: customerRaw ?? null,
+      state,
+      messageId: message?.id ?? null,
+      availableKeys: Object.keys(message || {}),
+    });
+    return false;
   }
 
   const docLookupStartedAt = nowMs();
@@ -696,6 +715,8 @@ async function initializeCostumerAndStoreMessageHistory(message, state) {
     });
 
   }
+
+  return true;
 }
 
 /* ---------- Product object updates ---------- */

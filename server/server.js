@@ -1624,11 +1624,34 @@ waEvents.on("status", (st = {}) => {
 });
 
 waEvents.on("inbound", async (payload = {}) => {
+  const customerId = normalizeCustomerId(
+    payload.from ??
+    payload.fromPhone ??
+    payload.customerId ??
+    payload.customer_id ??
+    payload.__rawMessage?.from ??
+    payload.raw?.from ??
+    payload.raw?.__rawMessage?.from
+  );
+  const businessId = normalizeCustomerId(
+    payload.to ??
+    payload.recipient_id ??
+    payload.__rawValue?.metadata?.display_phone_number ??
+    payload.raw?.to
+  );
 
-  
-  payload.from = normalizeCustomerId(String(payload.from)); // customer
-  payload.to   = normalizeCustomerId(String(payload.to));   // your biz number
-  await initializeCostumerAndStoreMessageHistory(payload, 1);
+  if (!customerId) {
+    console.error("[WA][INBOUND][SKIP_INVALID_IDENTITY]", {
+      id: payload?.id ?? null,
+      availableKeys: Object.keys(payload || {}),
+    });
+    return;
+  }
+
+  payload.from = customerId; // customer
+  payload.to = businessId;   // your biz number
+  const stored = await initializeCostumerAndStoreMessageHistory(payload, 1);
+  if (!stored) return;
   try {
     mesageSorter(payload);
   } catch (err) {
