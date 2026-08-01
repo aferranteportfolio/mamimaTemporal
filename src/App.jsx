@@ -348,6 +348,15 @@ useEffect(() => {
     const senderDigits = normalizeId(msg.from).digits;
     const senderSpaced = normalizeId(msg.from).spaced;
 
+    if (!senderDigits) {
+      console.error("[CHAT-DIAG][inbound:dropped-missing-sender]", {
+        messageId: msg.id || null,
+        chatId: msg.chatId || null,
+        from: msg.from || null,
+      });
+      return;
+    }
+
     const conv = findConversationByAny(conversations, msg.from);
     const convId = conv?.id ?? senderDigits;
 
@@ -542,7 +551,18 @@ useEffect(() => {
         const convs = await fetchConversations();
         console.log('[Init] conversations raw', { count: convs.length, sample: convs.slice(0, 5) });
         
-        const normalized = convs.map(normalizeConversation);
+        const normalized = convs
+          .map(normalizeConversation)
+          .filter(conversation => {
+            const valid = Boolean(normalizeId(conversation.id).digits);
+            if (!valid) {
+              console.warn("[CHAT-DIAG][conversation:dropped-invalid-id]", {
+                id: conversation.id || null,
+                phone: conversation.phone || null,
+              });
+            }
+            return valid;
+          });
         const sorted = sortConversations(normalized);
         setConversations(sorted);
 
@@ -591,8 +611,16 @@ useEffect(() => {
 useEffect(() => {
   const chatId = activeChatId;
   if (!chatId) return;
-    console.log("[MessagesEffect] loading history for", chatId);
-  if (loadingChatRef.current === chatId) return;    // ✅
+  console.info("[CHAT-DIAG][history-effect:start]", {
+    chatId,
+    activeChatId: activeChatIdRef.current,
+    inFlightChatId: loadingChatRef.current,
+    cachedCount: messagesByChat[chatId]?.length || 0,
+  });
+  if (loadingChatRef.current === chatId) {
+    console.info("[CHAT-DIAG][history-effect:skip-duplicate]", { chatId });
+    return;
+  }
 
   let aborted = false;
   const ac = new AbortController();
@@ -603,7 +631,14 @@ useEffect(() => {
       setMsgError(null);
       setMsgLoading(true);
       const res = await fetchMessages(chatId, { signal: ac.signal });
-      if (aborted) return;
+      if (aborted) {
+        console.info("[CHAT-DIAG][history-effect:discarded]", {
+          requestedChatId: chatId,
+          activeChatId: activeChatIdRef.current,
+          reason: "effect-cleanup",
+        });
+        return;
+      }
 
       const items = (res || [])
         .map(m => ({
@@ -613,6 +648,12 @@ useEffect(() => {
         }))
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+      console.info("[CHAT-DIAG][history-effect:commit]", {
+        requestedChatId: chatId,
+        activeChatId: activeChatIdRef.current,
+        itemCount: items.length,
+        messageChatIds: [...new Set(items.map(item => String(item.chatId || "(missing)")))],
+      });
       setMessagesByChat(prev => ({ ...prev, [chatId]: items }));
 
       if (items.length) {
@@ -627,7 +668,12 @@ useEffect(() => {
       }
     } catch (err) {
       if (aborted) return;
-
+      console.error("[CHAT-DIAG][history-effect:error]", {
+        requestedChatId: chatId,
+        activeChatId: activeChatIdRef.current,
+        name: err?.name,
+        message: err?.message,
+      });
       setMsgError(err?.message || "Failed to load messages");
     } finally {
       if (!aborted) {
@@ -638,6 +684,10 @@ useEffect(() => {
   })();
 
   return () => {
+    console.info("[CHAT-DIAG][history-effect:cleanup]", {
+      requestedChatId: chatId,
+      activeChatId: activeChatIdRef.current,
+    });
     aborted = true;
     ac.abort();
     if (loadingChatRef.current === chatId) loadingChatRef.current = null;
@@ -647,6 +697,13 @@ useEffect(() => {
 
   // pick chat & lazy-load messages if needed (kept)
 async function handleSelectChat(id) {
+  if (!normalizeId(id).digits) {
+    console.error("[CHAT-DIAG][conversation:selection-blocked]", {
+      selectedChatId: id || null,
+      previousChatId: activeChatIdRef.current,
+    });
+    return;
+  }
   const fromSearch = searchResults.find(c => c.id === id);
 if (fromSearch) {
   setConversations(prev => {
@@ -654,7 +711,12 @@ if (fromSearch) {
     return sortConversations([...prev, normalizeConversation(fromSearch)]);
   });
 }
-  console.log("[SelectChat] clicked", id);
+  console.info("[CHAT-DIAG][conversation:selected]", {
+    selectedChatId: id,
+    previousChatId: activeChatIdRef.current,
+    source: fromSearch ? "search" : "sidebar",
+    cachedCount: messagesByChat[id]?.length || 0,
+  });
   const prev = conversations.find(c => c.id === id);
   const prevUnread = prev?.unread || 0;
 
@@ -962,11 +1024,22 @@ const conversationsForSidebar = useMemo(() => {
   useEffect(() => {
     const activeId = chatWindowProps.activeConversation?.id;
     const list = chatWindowProps.messages || [];
+    if (!activeChatId) return;
 
-
-
-
-  }, [chatWindowProps.activeConversation, chatWindowProps.connectivity, chatWindowProps.messages]);
+    console.info("[CHAT-DIAG][active-conversation:resolved]", {
+      activeChatId,
+      found: Boolean(chatWindowProps.activeConversation),
+      resolvedId: activeId || null,
+      displayName: chatWindowProps.activeConversation?.displayName || null,
+      customerId: chatWindowProps.activeConversation?.customerId || null,
+      phone: chatWindowProps.activeConversation?.phone || null,
+      customerIdRaw: chatWindowProps.activeConversation?.customerIdRaw || null,
+      messageCount: list.length,
+      conversationCount: conversations.length,
+      searchResultCount: searchResults.length,
+      searchActive: Boolean(searchTerm.trim()),
+    });
+  }, [activeChatId, active, activeMessages, conversations.length, searchResults.length, searchTerm]);
   // ---------- END ----------
 
   if (loading) {

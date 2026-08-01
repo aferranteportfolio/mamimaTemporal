@@ -429,10 +429,18 @@ function normalizeHistoryMessage(raw) {
 }
 
 
-export async function fetchMessages(chatId) {
+export async function fetchMessages(chatId, options = {}) {
   const url = `/api/messages?conversationId=${encodeURIComponent(chatId)}`;
+  const requestId = `history-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const startedAt = performance.now();
 
-  const r = await apiFetch(url);
+  console.info("[CHAT-DIAG][history:request]", {
+    requestId,
+    requestedChatId: String(chatId),
+    url,
+  });
+
+  const r = await apiFetch(url, { signal: options.signal });
   const j = await okJsonOrThrow(r, "fetchMessages");
 
   const rawArr = j?.data ?? j ?? [];
@@ -441,9 +449,17 @@ export async function fetchMessages(chatId) {
   const normalized = arr.map(normalizeHistoryMessage);
 
   try {
-    console.log("[FE][API] fetchMessages(normalized)", {
-      chatId,
+    const responseChatIds = [...new Set(normalized.map(m => String(m.chatId || "(missing)")))];
+    console.info("[CHAT-DIAG][history:response]", {
+      requestId,
+      requestedChatId: String(chatId),
+      durationMs: Math.round(performance.now() - startedAt),
       total: normalized.length,
+      responseChatIds,
+      hasChatIdMismatch: responseChatIds.some(id => id !== String(chatId)),
+      apiStats: j?.stats || null,
+      firstMessage: normalized[0] ? { id: normalized[0].id, timestamp: normalized[0].timestamp } : null,
+      lastMessage: normalized.at(-1) ? { id: normalized.at(-1).id, timestamp: normalized.at(-1).timestamp } : null,
       audios: normalized.filter(m => m.type === "audio").length,
       locations: normalized.filter(m => m.type === "location").length,
     });

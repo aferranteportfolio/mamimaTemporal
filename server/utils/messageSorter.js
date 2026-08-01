@@ -53,7 +53,7 @@ function readJsonSafe(filePath) {
 // --- turn one saved reply meta into a send function --------
 function buildReplyFunction(savedReply, folderName, miscCfg) {
   return async function replyFn(toPhone) {
-    await actuallySendSavedReplyObject(toPhone, savedReply, folderName, miscCfg);
+    return actuallySendSavedReplyObject(toPhone, savedReply, folderName, miscCfg);
   };
 }
 
@@ -282,6 +282,7 @@ async function mesageSorter(rawMessage) {
     "";
   let wasAutoReplied = false;
   let triggeredAutoReplyName = "none";
+  let matchedReply = null;
 
   // 1. Try CTWA/ad replies first if message is from an ad
   let matchedAd = false;
@@ -290,9 +291,8 @@ async function mesageSorter(rawMessage) {
       return checkMessageAndMatch(
         normMsg,
         (m /*, cfg */) => {
-          wasAutoReplied = true;
           triggeredAutoReplyName = title || "untitled";
-          replyFn(m.from);
+          matchedReply = () => replyFn(m.from);
         },
         triggerArr,
         true,
@@ -307,15 +307,39 @@ async function mesageSorter(rawMessage) {
       return checkMessageAndMatch(
         normMsg,
         (m /*, cfg */) => {
-          wasAutoReplied = true;
           triggeredAutoReplyName = title || "untitled";
-          replyFn(m.from);
+          matchedReply = () => replyFn(m.from);
         },
         triggerArr,
         false,
         miscCfg
       );
     });
+  }
+
+  if (matchedReply) {
+    console.log("[AUTO-REPLY][MATCH]", {
+      to: normMsg.from,
+      reply: triggeredAutoReplyName,
+    });
+    try {
+      const result = await matchedReply();
+      wasAutoReplied = Number(result?.queuedCount || 0) > 0;
+      console.log(wasAutoReplied ? "[AUTO-REPLY][QUEUED]" : "[AUTO-REPLY][EMPTY]", {
+        to: normMsg.from,
+        reply: triggeredAutoReplyName,
+        queuedCount: result?.queuedCount || 0,
+        runId: result?.runId || null,
+      });
+    } catch (err) {
+      console.error("[AUTO-REPLY][FAILED]", {
+        to: normMsg.from,
+        reply: triggeredAutoReplyName,
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+      });
+    }
   }
 
   console.log(`message received : ${messageReceived}`);
@@ -344,23 +368,21 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
   // 1) DB logging
   try {
     if (miscCfg?.d) {
-      const okProduct = await updateProductObejctByID(
+      await updateProductObejctByID(
         toPhone,
         savedReply.title,
         PRODUCT_VALUE_DEFAULT,
         SHIPPING_INFO_DEFAULT,
         QUANTITY_DEFAULT
       );
-      if (okProduct === false) return;
     }
 
     if (miscCfg?.f) {
-      const okShip = await updateShippingStatusByID(toPhone, SHIPPING_VALUE_DEFAULT);
-      if (okShip === false) return;
+      await updateShippingStatusByID(toPhone, SHIPPING_VALUE_DEFAULT);
     }
   } catch (err) {
     console.error("[autoReplyEngine] ⚠ DB logging failed; aborting send:", err);
-    return;
+    throw err;
   }
 
   // ✅ schedule via outbox (no sleep)
@@ -409,6 +431,8 @@ export async function actuallySendSavedReplyObject(toPhone, savedReply, folderNa
       }
     }
   }
+
+  return { queuedCount: k, runId };
 }
 
 

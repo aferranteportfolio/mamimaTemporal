@@ -37,7 +37,19 @@ function toOutboundUI(raw) {
 }
 
 function toInboundUI(raw) {
-  const chatId = raw.chatId || getChatIdByPhone(raw.from);
+  // The browser uses this identity to select/update the conversation. Falling
+  // back to the sender is required when no in-memory phone-to-chat map exists.
+  const chatId = raw.chatId || getChatIdByPhone(raw.from) || raw.from;
+
+  if (!raw.from || !chatId) {
+    console.error("[WA][INBOUND][DROP_INVALID_IDENTITY]", {
+      id: raw?.id ?? null,
+      from: raw?.from ?? null,
+      chatId: chatId ?? null,
+      availableKeys: Object.keys(raw || {}),
+    });
+    return null;
+  }
 
   // Normalize type
   const hintedType = (raw.type || raw.media?.kind || "").toLowerCase();
@@ -78,7 +90,7 @@ function toInboundUI(raw) {
   return {
     id: raw.id,
     chatId,
-    from: "them",
+    from: raw.from,
     dir: "in",
     type,
     text: raw.text || "",
@@ -108,6 +120,7 @@ onOutbound((payload) => {
 // INBOUND = customer → business
 onInbound((payload) => {
   const ui = toInboundUI(payload);
+  if (!ui) return;
   // 👇 this is what realtime.js listens to
   broadcast("inbound_ui", ui);
 });

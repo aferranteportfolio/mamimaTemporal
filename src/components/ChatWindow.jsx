@@ -290,6 +290,9 @@ useEffect(() => {
 const customerLabel =
   activeConversation?.displayName?.trim() ||
   activeConversation?.customerId ||
+  activeConversation?.phone ||
+  activeConversation?.customerIdRaw ||
+  activeConversation?.id ||
   "Cliente";
 
 const renderedItems = useMemo(() => {
@@ -365,7 +368,7 @@ const renderedItems = useMemo(() => {
       {/* TOP — fixed */}
       <div className="panel-header chat-top">
         <div>
-          <div className="panel-title">{activeConversation.customerId}</div>
+          <div className="panel-title">{customerLabel}</div>
           <div className="small">last seen recently</div>
         </div>
         <div className="small">

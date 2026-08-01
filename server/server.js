@@ -256,7 +256,7 @@ function extractSimpleMessages(body) {
         }
 
         const normalized = {
-          from: safeDigits(m?.from),     // customer number (digits)
+          from: safeDigits(m?.from || v?.contacts?.[0]?.wa_id), // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
           id: m?.id ?? null,             // wamid
           ts: tsToIso(m?.timestamp),     // ISO string
@@ -950,6 +950,8 @@ function getImageMessagesWithUrl(doc) {
 }
 // Messages for a conversation (query param: ?conversationId=...)
 app.get("/api/messages", async (req, res) => {
+  const requestId = String(req.get("x-request-id") || `messages-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`);
+  const startedAt = Date.now();
   try {
     const conversationId = String(
       req.query.conversationId || req.query.chatId || ""
@@ -965,6 +967,14 @@ app.get("/api/messages", async (req, res) => {
     const full  = String(req.query.full || "") === "1";
     const limit = Math.min(parseInt(req.query.limit ?? "200", 10) || 200, 300);
     const since = Number(req.query.sinceSeq || 0); // load *newer than* this seq
+
+    console.info("[CHAT-DIAG][api-messages:request]", {
+      requestId,
+      conversationId,
+      full,
+      limit,
+      since,
+    });
 
     // ---------------- Load doc (tolerate phone ids) ----------------
     let product = null;
@@ -1001,6 +1011,15 @@ app.get("/api/messages", async (req, res) => {
 
     // Build + normalize items
     const allRaw = buildMessagesFromProduct(product) || []; // [{id, chatId, from, type, text, imageUrl, videoUrl, timestamp, ...}]
+
+    console.info("[CHAT-DIAG][api-messages:resolved]", {
+      requestId,
+      requestedConversationId: conversationId,
+      productId: String(product._id || ""),
+      productCustomerId: String(product.customer_id || ""),
+      rawMessageCount: allRaw.length,
+      rawChatIds: [...new Set(allRaw.map(message => String(message.chatId || "(missing)")))],
+    });
 
     const audioMsgs = (allRaw || []).filter(m => m.type === "audio");
 if (audioMsgs.length) {
@@ -1048,13 +1067,29 @@ if (audioMsgs.length) {
       items = all.slice(-limit);
     }
 
+    console.info("[CHAT-DIAG][api-messages:response]", {
+      requestId,
+      requestedConversationId: conversationId,
+      returned: items.length,
+      total,
+      durationMs: Date.now() - startedAt,
+      first: items[0] ? { id: items[0].id, timestamp: items[0].timestamp } : null,
+      last: items.at(-1) ? { id: items.at(-1).id, timestamp: items.at(-1).timestamp } : null,
+    });
+
     res.json({
       ok: true,
       data: items,
       stats: { total, minSeq, maxSeq, returned: items.length },
     });
   } catch (err) {
-    console.error("[API/messages][ERROR]", err);
+    console.error("[CHAT-DIAG][api-messages:error]", {
+      requestId,
+      durationMs: Date.now() - startedAt,
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack,
+    });
     res.status(500).json({ ok: false, error: "Failed to build messages" });
   }
 });
@@ -1589,13 +1624,36 @@ waEvents.on("status", (st = {}) => {
 });
 
 waEvents.on("inbound", async (payload = {}) => {
+  const customerId = normalizeCustomerId(
+    payload.from ??
+    payload.fromPhone ??
+    payload.customerId ??
+    payload.customer_id ??
+    payload.__rawMessage?.from ??
+    payload.raw?.from ??
+    payload.raw?.__rawMessage?.from
+  );
+  const businessId = normalizeCustomerId(
+    payload.to ??
+    payload.recipient_id ??
+    payload.__rawValue?.metadata?.display_phone_number ??
+    payload.raw?.to
+  );
 
-  
-  payload.from = normalizeCustomerId(String(payload.from)); // customer
-  payload.to   = normalizeCustomerId(String(payload.to));   // your biz number
-  await initializeCostumerAndStoreMessageHistory(payload, 1);
+  if (!customerId) {
+    console.error("[WA][INBOUND][SKIP_INVALID_IDENTITY]", {
+      id: payload?.id ?? null,
+      availableKeys: Object.keys(payload || {}),
+    });
+    return;
+  }
+
+  payload.from = customerId; // customer
+  payload.to = businessId;   // your biz number
+  const stored = await initializeCostumerAndStoreMessageHistory(payload, 1);
+  if (!stored) return;
   try {
-    mesageSorter(payload);
+    await mesageSorter(payload);
   } catch (err) {
     console.error("mesageSorter error:", err, "for message:", payload);
   }
