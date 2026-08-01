@@ -591,8 +591,16 @@ useEffect(() => {
 useEffect(() => {
   const chatId = activeChatId;
   if (!chatId) return;
-    console.log("[MessagesEffect] loading history for", chatId);
-  if (loadingChatRef.current === chatId) return;    // ✅
+  console.info("[CHAT-DIAG][history-effect:start]", {
+    chatId,
+    activeChatId: activeChatIdRef.current,
+    inFlightChatId: loadingChatRef.current,
+    cachedCount: messagesByChat[chatId]?.length || 0,
+  });
+  if (loadingChatRef.current === chatId) {
+    console.info("[CHAT-DIAG][history-effect:skip-duplicate]", { chatId });
+    return;
+  }
 
   let aborted = false;
   const ac = new AbortController();
@@ -603,7 +611,14 @@ useEffect(() => {
       setMsgError(null);
       setMsgLoading(true);
       const res = await fetchMessages(chatId, { signal: ac.signal });
-      if (aborted) return;
+      if (aborted) {
+        console.info("[CHAT-DIAG][history-effect:discarded]", {
+          requestedChatId: chatId,
+          activeChatId: activeChatIdRef.current,
+          reason: "effect-cleanup",
+        });
+        return;
+      }
 
       const items = (res || [])
         .map(m => ({
@@ -613,6 +628,12 @@ useEffect(() => {
         }))
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+      console.info("[CHAT-DIAG][history-effect:commit]", {
+        requestedChatId: chatId,
+        activeChatId: activeChatIdRef.current,
+        itemCount: items.length,
+        messageChatIds: [...new Set(items.map(item => String(item.chatId || "(missing)")))],
+      });
       setMessagesByChat(prev => ({ ...prev, [chatId]: items }));
 
       if (items.length) {
@@ -627,7 +648,12 @@ useEffect(() => {
       }
     } catch (err) {
       if (aborted) return;
-
+      console.error("[CHAT-DIAG][history-effect:error]", {
+        requestedChatId: chatId,
+        activeChatId: activeChatIdRef.current,
+        name: err?.name,
+        message: err?.message,
+      });
       setMsgError(err?.message || "Failed to load messages");
     } finally {
       if (!aborted) {
@@ -638,6 +664,10 @@ useEffect(() => {
   })();
 
   return () => {
+    console.info("[CHAT-DIAG][history-effect:cleanup]", {
+      requestedChatId: chatId,
+      activeChatId: activeChatIdRef.current,
+    });
     aborted = true;
     ac.abort();
     if (loadingChatRef.current === chatId) loadingChatRef.current = null;
@@ -654,7 +684,12 @@ if (fromSearch) {
     return sortConversations([...prev, normalizeConversation(fromSearch)]);
   });
 }
-  console.log("[SelectChat] clicked", id);
+  console.info("[CHAT-DIAG][conversation:selected]", {
+    selectedChatId: id,
+    previousChatId: activeChatIdRef.current,
+    source: fromSearch ? "search" : "sidebar",
+    cachedCount: messagesByChat[id]?.length || 0,
+  });
   const prev = conversations.find(c => c.id === id);
   const prevUnread = prev?.unread || 0;
 
