@@ -6,6 +6,7 @@ import fssync from 'node:fs';
 import { Product } from '../../dbFunctionality/schemas/schema.js';
 import { MessageTask } from '../../dbFunctionality/schemas/messageTask.js';
 import { computeSendAt } from '../pm/time-utils.js';
+import { productMatchesProgramState } from '../pm/eligibility.js';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/whatsAppDB_3';
 const BASE_DIR = path.resolve(process.cwd(), 'programmedmsgs');
@@ -73,25 +74,6 @@ function tagsMatch(productTags, selectedTags) {
   if (!selected.length) return true; // backward compatible: no targeting means all products.
   const productSet = new Set(cleanTags(productTags));
   return selected.some((tag) => productSet.has(tag));
-}
-
-function hasFunnelState(state = [], funnelState) {
-  return state.some((s) => s.purchase_state?.some((ps) => ps.funnel_state === funnelState));
-}
-
-function state2IsValid(state = []) {
-  return state.some((s) => {
-    const lastShipping = s.shippingStatus?.[s.shippingStatus.length - 1];
-    const lastFunnel = s.purchase_state?.[s.purchase_state.length - 1];
-    const lastSent = s.messagesSentCollection?.[s.messagesSentCollection.length - 1];
-    return lastFunnel?.funnel_state === 2 && !!lastShipping && !!lastSent;
-  });
-}
-
-function productMatchesProgramState(productState = [], programState) {
-  if (programState === 1) return hasFunnelState(productState, 0);
-  if (programState === 2) return state2IsValid(productState);
-  return hasFunnelState(productState, programState);
 }
 
 function programInactivityMs(schedule = {}) {

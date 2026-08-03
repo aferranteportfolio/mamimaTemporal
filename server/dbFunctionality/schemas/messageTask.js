@@ -14,6 +14,11 @@ const messageTaskSchema = new mongoose.Schema({
   processingAt: { type: Date },
   failed:     { type: Boolean, default: false },
   failReason: { type: String },
+  cancelled:  { type: Boolean, default: false },
+  cancelledAt:{ type: Date },
+  cancelReason: { type: String },
+  expectedState: { type: Number },
+  actualState: { type: Number },
   productTags: [{ type: String }],
   dedupeKey:  { type: String, required: false }
 },
