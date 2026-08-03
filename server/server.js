@@ -1589,13 +1589,45 @@ waEvents.on("status", (st = {}) => {
 });
 
 waEvents.on("inbound", async (payload = {}) => {
+  // Only genuine customer -> business events belong in this pipeline.
+  // UI-shaped events can carry the customer phone in `fromPhone` while using
+  // a semantic `from` value such as "them". Outbound events must never be
+  // passed to the auto-reply matcher.
+  const direction = String(payload.dir || payload.direction || "").toLowerCase();
+  const rawFrom = payload.fromPhone || payload.customer_id || payload.customerId || payload.from;
+  const customerId = normalizeCustomerId(rawFrom);
+  const ourNumber = normalizeCustomerId(
+    payload.to || payload.ourNumber || payload.sellerId || OUR_NUMBER
+  );
 
-  
-  payload.from = normalizeCustomerId(String(payload.from)); // customer
-  payload.to   = normalizeCustomerId(String(payload.to));   // your biz number
+  if (direction === "out" || direction === "outbound" || payload.from === "me") {
+    return;
+  }
+
+  if (!customerId) {
+    console.error("❌ inbound event ignored: missing customerId", {
+      id: payload.id ?? null,
+      type: payload.type ?? null,
+      direction: direction || null,
+      hasFromPhone: Boolean(payload.fromPhone),
+    });
+    return;
+  }
+
+  if (!ourNumber) {
+    console.error("❌ inbound event ignored: missing business number", {
+      id: payload.id ?? null,
+      customerId,
+    });
+    return;
+  }
+
+  payload.from = customerId;
+  payload.to = ourNumber;
+
   await initializeCostumerAndStoreMessageHistory(payload, 1);
   try {
-    mesageSorter(payload);
+    await mesageSorter(payload);
   } catch (err) {
     console.error("mesageSorter error:", err, "for message:", payload);
   }
