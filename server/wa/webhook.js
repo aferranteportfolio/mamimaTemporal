@@ -162,6 +162,7 @@ export function registerWaWebhook(app) {
                 // Do not write directly here; the server-level inbound listener
                 // persists this payload once with id/media metadata.
                 waEvents.emit('inbound', {
+                  [Symbol.for('mamima.facebookPayload')]: req.body,
                   from,
                   to,
                   text: text || media?.caption || (location ? (location.name || location.address || "📍 Ubicación") : ''),
@@ -310,6 +311,7 @@ waWebhook.post("/webhook", (req, res) => {
         for (const m of v.messages) {
           // Build a minimal internal payload for your app
           const p = {
+            [Symbol.for('mamima.facebookPayload')]: raw,
             from: m.from,                   // customer
             to: ourNumber,                  // your business number
             id: m.id,                       // wamid...
