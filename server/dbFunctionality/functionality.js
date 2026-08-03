@@ -4,6 +4,8 @@
 import { Product } from './schemas/schema.js';
 import { durationMs, emitObs, nowMs } from '../utils/observability.js';
 
+const FACEBOOK_PAYLOAD = Symbol.for('mamima.facebookPayload');
+
 /* ---------- Utilities ---------- */
 export function normalizeCustomerId(x) {
   if (!x) return null;
@@ -619,7 +621,20 @@ async function initializeCostumerAndStoreMessageHistory(message, state) {
   const ourNumber  = normalizeCustomerId(ourRaw);
 
   if (!customerId) {
-    console.error('❌ initializeCostumerAndStoreMessageHistory: invalid customerId', { customerRaw });
+    const facebookPayload =
+      message?.[FACEBOOK_PAYLOAD] ??
+      message?.raw?.[FACEBOOK_PAYLOAD] ??
+      message?.__rawValue ??
+      message?.raw?.__rawValue ??
+      message?.__rawMessage ??
+      message?.raw?.__rawMessage ??
+      message;
+
+    console.error('❌ initializeCostumerAndStoreMessageHistory: invalid customerId', {
+      customerRaw,
+      state,
+      facebookPayload,
+    });
     return;
   }
 
