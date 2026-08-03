@@ -110,6 +110,7 @@ function messagePreview(message) {
 function mapInboundToUi(raw) {
   const {
     from,
+    fromPhone,
     to,
     chatId: rawChatId,
     id,
@@ -122,6 +123,9 @@ function mapInboundToUi(raw) {
     referral_type,
     referral_metadata,
   } = raw || {};
+  // Some older inbound_ui payloads used the semantic value "them" in `from`
+  // and kept the real customer number in `fromPhone`.
+  const customerFrom = fromPhone || (from === "them" ? null : from);
   const whenMs  = Number.isFinite(ts) ? ts : toMs(ts);
   const whenIso = new Date(whenMs).toISOString();
 
@@ -179,13 +183,13 @@ function mapInboundToUi(raw) {
 
   const msg = {
     id,
-    from,
+    from: customerFrom,
     to,
     ts,
     type,
     text: text ?? (media?.caption ?? null),
     media: mediaObj,
-        chatId: rawChatId || normalizeId(from).digits,
+    chatId: rawChatId || normalizeId(customerFrom).digits,
     dir: 'in',
     timestamp: whenIso,
     whenMs,
@@ -347,6 +351,10 @@ useEffect(() => {
     const msg = mapInboundToUi(raw);
     const senderDigits = normalizeId(msg.from).digits;
     const senderSpaced = normalizeId(msg.from).spaced;
+
+    // Never create a transient conversation with an empty key. It would merge
+    // unrelated customers until the next full conversations reload.
+    if (!senderDigits && !msg.chatId) return;
 
     const conv = findConversationByAny(conversations, msg.from);
     const convId = conv?.id ?? senderDigits;
