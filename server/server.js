@@ -256,6 +256,7 @@ function extractSimpleMessages(body) {
         }
 
         const normalized = {
+          [Symbol.for('mamima.facebookPayload')]: body,
           from: safeDigits(m?.from),     // customer number (digits)
           to,                            // your biz number (digits) or phone_number_id
           id: m?.id ?? null,             // wamid
