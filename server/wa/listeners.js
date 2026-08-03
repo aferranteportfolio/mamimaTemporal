@@ -78,7 +78,10 @@ function toInboundUI(raw) {
   return {
     id: raw.id,
     chatId,
-    from: "them",
+    // Keep the customer phone as the conversation identity. `dir` already
+    // describes who sent the message; replacing `from` with "them" makes the
+    // client normalize every affected customer to the same empty id.
+    from: raw.from,
     dir: "in",
     type,
     text: raw.text || "",
