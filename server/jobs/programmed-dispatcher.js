@@ -8,6 +8,7 @@ import tz from "dayjs/plugin/timezone.js";
 import "dotenv/config";
 import mongoose from "mongoose";
 import { Product } from "../dbFunctionality/schemas/schema.js"; // for lastInboundTs checks
+import { currentPurchaseState, productMatchesProgramState } from "./pm/eligibility.js";
 
 dayjs.extend(utc);
 dayjs.extend(tz);
@@ -312,10 +313,12 @@ export async function runProgrammedDispatcher({
     ? {
         _id: onlyTaskId,
         sent: false,
+        cancelled: { $ne: true },
         state_id: { $in: statesOnly },
       }
     : {
         sent: false,
+        cancelled: { $ne: true },
         state_id: { $in: statesOnly },
         created_at: { $gte: cutoff },
       };
@@ -344,6 +347,7 @@ export async function runProgrammedDispatcher({
       {
         _id: row._id,
         sent: false,
+        cancelled: { $ne: true },
         $or: [
           { processing: { $ne: true } },
           { processingAt: { $lte: staleProcessingCutoff } },
@@ -383,6 +387,31 @@ export async function runProgrammedDispatcher({
         customer_id: row.customer_id,
         latestSeller: row.sellerId,
       }).lean();
+
+      // Funnel eligibility can change while a task is waiting for sendAt.
+      // Revalidate against the current customer state immediately before send
+      // and consume stale work as cancelled rather than reporting it as sent.
+      if (!productMatchesProgramState(product?.state, row.state_id)) {
+        const current = currentPurchaseState(product?.state);
+        row.cancelled = true;
+        row.cancelledAt = new Date();
+        row.cancelReason = "funnel_state_changed";
+        row.expectedState = row.state_id;
+        row.actualState = current?.purchaseState?.funnel_state;
+        row.processing = false;
+        await row.save();
+        if (verbose) {
+          console.warn(
+            "[PD] cancelled stale funnel task",
+            row._id,
+            "expected",
+            row.expectedState,
+            "actual",
+            row.actualState
+          );
+        }
+        continue;
+      }
 
       let lastInbound = product?.lastInboundTs || null;
 
