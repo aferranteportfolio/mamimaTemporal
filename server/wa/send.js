@@ -4,8 +4,10 @@ import FormData from "form-data";
 
 
 // server/wa/send.js
-const TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
+import { DEFAULT_WHATSAPP_PHONE_ID, DEFAULT_WHATSAPP_TOKEN } from "./defaults.js";
+
+const TOKEN = process.env.WHATSAPP_TOKEN || DEFAULT_WHATSAPP_TOKEN;
+const PHONE_ID = process.env.WHATSAPP_PHONE_ID || DEFAULT_WHATSAPP_PHONE_ID;
 
 const API_BASE     = `https://graph.facebook.com/v21.0/${PHONE_ID}`;
 const API_MESSAGES = `${API_BASE}/messages`;
@@ -43,11 +45,11 @@ export async function uploadMediaToWhatsApp(fileObj) {
   const resp = await fetch(
     // example:
     // https://graph.facebook.com/v20.0/<PHONE_NUMBER_ID>/media
-    `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_ID}/media`,
+    `https://graph.facebook.com/v20.0/${PHONE_ID}/media`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`
+        Authorization: `Bearer ${TOKEN}`
       },
       body: form
     }
