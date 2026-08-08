@@ -1,6 +1,4 @@
 // server/http-senders.js
-import fetch from "node-fetch";
-
 const API_BASE =
   process.env.VITE_API_BASE?.replace(/\/+$/, "") ||
   `http://localhost:${process.env.PORT || 3050}`;
