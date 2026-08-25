@@ -86,13 +86,40 @@ function logMetaSummary(req, where, meta) {
 }
 
 
+// Serialize read-modify-write operations for each meta.json in this process.
+// Without this, simultaneous automatic replies can overwrite each other's usageCount.
+const jsonFileLocks = new Map();
+
+async function withJsonFileLock(file, operation) {
+  const previous = jsonFileLocks.get(file) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  jsonFileLocks.set(file, current);
+
+  await previous.catch(() => {});
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (jsonFileLocks.get(file) === current) jsonFileLocks.delete(file);
+  }
+}
+
 async function readJson(file) {
   const s = await fs.readFile(file, "utf8");
   return JSON.parse(s);
 }
 
 async function writeJson(file, obj) {
-  await fs.writeFile(file, JSON.stringify(obj, null, 2), "utf8");
+  // Never expose a truncated/partially-written meta.json to concurrent readers.
+  const tmp = `${file}.${process.pid}.${rid(12)}.tmp`;
+  try {
+    await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
+    await fs.rename(tmp, file);
+  } catch (error) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 // utility parsers
@@ -457,6 +484,8 @@ async function doSaveUpdate(req, res) {
   const id = req.params.id;
   const dir = path.join(BASE_DIR, id);
   const metaPath = path.join(dir, "meta.json");
+
+  return withJsonFileLock(metaPath, async () => {
   const raw = await readJson(metaPath);
   const meta = normalizeMeta(raw);
 
@@ -526,6 +555,7 @@ async function doSaveUpdate(req, res) {
   await writeJson(metaPath, updated);
   log(req, `UPDATE id=${id} title="${title}" msgs=${updated.messages.length} uploads=${uploads.length} keywords=${Array.isArray(keywords)?keywords.length:0}`);
   res.json(updated);
+  });
 }
 
 // POST — update title/messages/keywords/misc; append new uploads per message
@@ -552,18 +582,18 @@ savedRepliesRouter.patch("/:id/use", async (req, res) => {
   const id = req.params.id;
   try {
     const metaPath = path.join(BASE_DIR, id, "meta.json");
-    const raw  = await readJson(metaPath);
-    const meta = normalizeMeta(raw);
-    const to = req.query.to || req.get("x-sr-to") || null;
+    await withJsonFileLock(metaPath, async () => {
+      const raw = await readJson(metaPath);
+      const meta = normalizeMeta(raw);
+      const to = req.query.to || req.get("x-sr-to") || null;
 
+      meta.usageCount = (meta.usageCount || 0) + 1;
+      meta.lastUsedAt = new Date().toISOString();
 
-    meta.usageCount = (meta.usageCount || 0) + 1;
-    meta.lastUsedAt = new Date().toISOString();
-    
-
-    await writeJson(metaPath, meta);
-    log(req, `USE id=${meta.id} usageCount=${meta.usageCount}`);
-    res.json({ id: meta.id, usageCount: meta.usageCount, lastUsedAt: meta.lastUsedAt ,to, meta});
+      await writeJson(metaPath, meta);
+      log(req, `USE id=${meta.id} usageCount=${meta.usageCount}`);
+      res.json({ id: meta.id, usageCount: meta.usageCount, lastUsedAt: meta.lastUsedAt, to, meta });
+    });
   } catch (e) {
     console.error(`[${stamp()}][SR][${req._rid}] [USE] ERROR id=${id}`, e);
     res.status(e?.code === "ENOENT" ? 404 : 500)
